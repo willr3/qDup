@@ -3,9 +3,10 @@ package io.hyperfoil.tools.qdup;
 import io.hyperfoil.tools.qdup.cmd.*;
 import io.hyperfoil.tools.qdup.config.RunConfigBuilder;
 import io.hyperfoil.tools.qdup.config.RunError;
-import io.hyperfoil.tools.qdup.config.log4j.QdupConfigurationFactory;
+//import io.hyperfoil.tools.qdup.config.log4j.QdupConfigurationFactory;
+import io.quarkus.picocli.runtime.annotations.TopCommand;
 import org.apache.commons.cli.*;
-import org.apache.logging.log4j.core.config.ConfigurationFactory;
+//import org.apache.logging.log4j.core.config.ConfigurationFactory;
 import org.slf4j.ext.XLogger;
 import org.slf4j.ext.XLoggerFactory;
 import io.hyperfoil.tools.qdup.config.RunConfig;
@@ -13,6 +14,7 @@ import io.hyperfoil.tools.qdup.config.yaml.Parser;
 import io.hyperfoil.tools.qdup.config.yaml.YamlFile;
 import io.hyperfoil.tools.yaup.AsciiArt;
 import io.hyperfoil.tools.yaup.StringUtil;
+import picocli.CommandLine;
 
 import java.io.*;
 import java.lang.invoke.MethodHandles;
@@ -27,6 +29,8 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+//@TopCommand
+//@CommandLine.Command(name = "qDup", mixinStandardHelpOptions = true, version = "0.6.17",description = "")
 public class QDup {
 
     private static final XLogger logger = XLoggerFactory.getXLogger(MethodHandles.lookup().lookupClass());
@@ -322,7 +326,7 @@ public class QDup {
 
         CommandLineParser parser = new DefaultParser();
         HelpFormatter formatter = new HelpFormatter();
-        CommandLine commandLine = null;
+        org.apache.commons.cli.CommandLine commandLine = null;
 
         String cmdLineSyntax = "[options] [yamlFiles]";
 
@@ -424,7 +428,7 @@ public class QDup {
     }
 
     public static void main(String[] args) {
-        ConfigurationFactory.setConfigurationFactory(new QdupConfigurationFactory());
+        //ConfigurationFactory.setConfigurationFactory(new QdupConfigurationFactory());
         QDup toRun = new QDup(args);
         boolean ok = toRun.run();
         if(!ok){

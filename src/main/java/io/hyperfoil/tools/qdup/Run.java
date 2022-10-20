@@ -16,15 +16,15 @@ import io.hyperfoil.tools.yaup.HashedSets;
 import io.hyperfoil.tools.yaup.StringUtil;
 import io.hyperfoil.tools.yaup.json.Json;
 import io.hyperfoil.tools.yaup.time.SystemTimer;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.Appender;
-import org.apache.logging.log4j.core.LoggerContext;
-import org.apache.logging.log4j.core.appender.FileAppender;
-import org.apache.logging.log4j.core.config.AppenderRef;
-import org.apache.logging.log4j.core.config.Configuration;
-import org.apache.logging.log4j.core.config.LoggerConfig;
-import org.apache.logging.log4j.core.layout.PatternLayout;
+//import org.apache.logging.log4j.Level;
+//import org.apache.logging.log4j.LogManager;
+//import org.apache.logging.log4j.core.Appender;
+//import org.apache.logging.log4j.core.LoggerContext;
+//import org.apache.logging.log4j.core.appender.FileAppender;
+//import org.apache.logging.log4j.core.config.AppenderRef;
+//import org.apache.logging.log4j.core.config.Configuration;
+//import org.apache.logging.log4j.core.config.LoggerConfig;
+//import org.apache.logging.log4j.core.layout.PatternLayout;
 import org.slf4j.Logger;
 import org.slf4j.ext.XLogger;
 import org.slf4j.ext.XLoggerFactory;
@@ -35,8 +35,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.Callable;
@@ -45,6 +43,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
+import java.util.logging.FileHandler;
+import java.util.logging.Formatter;
+import java.util.logging.Handler;
+import java.util.logging.LogManager;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -112,9 +114,10 @@ public class Run implements Runnable, DispatchObserver {
     XLogger runLogger;// = XLoggerFactory.getXLogger(RUN_LOGGER_NAME);
     XLogger stateLogger;// = XLoggerFactory.getXLogger(STATE_LOGGER_NAME);
 
-    FileAppender logAppender;
+//    FileAppender logAppender;
     private List<Stage> skipStages;
 
+    private FileHandler fileHandler;
     public Run(String outputPath,RunConfig config,Dispatcher dispatcher){
         if(config==null || dispatcher==null){
             throw new NullPointerException("Run config and dispatcher cannot be null");
@@ -149,28 +152,31 @@ public class Run implements Runnable, DispatchObserver {
     }
 
     private boolean removeLogger(){
-        final LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
-        final Configuration config = ctx.getConfiguration();
-        LoggerConfig loggerConfig = LoggerConfig.createLogger(false, Level.INFO, Run.RUN_LOGGER_NAME,"false",new AppenderRef[0],null,config,null);
-
-        if(logAppender!=null){
-            ctx.getLogger(Run.RUN_LOGGER_NAME).removeAppender(logAppender);
-            loggerConfig.removeAppender(logAppender.getName());
-            logAppender.stop();
-
-            String loggerName = getLoggerName();
-
-            ctx.getLogger(runLogger.getName()).removeAppender(logAppender);
-            if(ctx.getLogger(Run.RUN_LOGGER_NAME).getAppenders().containsKey(Run.RUN_LOGGER_NAME)){
-                Appender toRemove = ctx.getLogger(Run.RUN_LOGGER_NAME).getAppenders().get(Run.RUN_LOGGER_NAME);
-                ctx.getLogger(Run.RUN_LOGGER_NAME).removeAppender(toRemove);
-                loggerConfig.removeAppender(Run.RUN_LOGGER_NAME);
-                if(toRemove.isStarted()){
-                    toRemove.stop();
-                }
-            }
-            return true;
+        if(this.fileHandler!=null){
+            fileHandler.close();
         }
+//        final LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
+//        final Configuration config = ctx.getConfiguration();
+//        LoggerConfig loggerConfig = LoggerConfig.createLogger(false, Level.INFO, Run.RUN_LOGGER_NAME,"false",new AppenderRef[0],null,config,null);
+//
+//        if(logAppender!=null){
+//            ctx.getLogger(Run.RUN_LOGGER_NAME).removeAppender(logAppender);
+//            loggerConfig.removeAppender(logAppender.getName());
+//            logAppender.stop();
+//
+//            String loggerName = getLoggerName();
+//
+//            ctx.getLogger(runLogger.getName()).removeAppender(logAppender);
+//            if(ctx.getLogger(Run.RUN_LOGGER_NAME).getAppenders().containsKey(Run.RUN_LOGGER_NAME)){
+//                Appender toRemove = ctx.getLogger(Run.RUN_LOGGER_NAME).getAppenders().get(Run.RUN_LOGGER_NAME);
+//                ctx.getLogger(Run.RUN_LOGGER_NAME).removeAppender(toRemove);
+//                loggerConfig.removeAppender(Run.RUN_LOGGER_NAME);
+//                if(toRemove.isStarted()){
+//                    toRemove.stop();
+//                }
+//            }
+//            return true;
+//        }
         return false;
     }
 
@@ -184,50 +190,76 @@ public class Run implements Runnable, DispatchObserver {
     }
 
     boolean ensureLogger(){
-        if(logAppender == null || !logAppender.getFileName().contains(getOutputPath())){
+
+        if(this.fileHandler == null){
             synchronized (this){
-                final LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
-                final Configuration config = ctx.getConfiguration();
-                String loggerName = getLoggerName();
-                LoggerConfig runLoggerConfig = LoggerConfig.createLogger(true, Level.INFO, loggerName,"false",new AppenderRef[0],null,config,null);
-                config.addLogger(runLoggerConfig.getName(),runLoggerConfig);
-                runLoggerConfig.setAdditive(true); //doesn't work
-                runLogger = XLoggerFactory.getXLogger(loggerName);
-                LoggerConfig stateLoggerConfig = LoggerConfig.createLogger(true, Level.ALL, runLogger.getName()+".state","false",new AppenderRef[0],null,config,null);
-                stateLoggerConfig.setAdditive(true);
-                config.addLogger(stateLoggerConfig.getName(),stateLoggerConfig);
-                stateLogger = XLoggerFactory.getXLogger(getStateLoggerName());
-                if (logAppender == null) {
-                    Path outputPath = Paths.get(getOutputPath());
-                    if(!Files.exists(outputPath)){
-                        try {
-                            Files.createDirectories(outputPath);
-                        } catch (IOException e) {
-                            logger.error("error creating output directory "+getOutputPath(),e);
-                            return false;
-                        }
+                if(this.fileHandler == null){
+                    org.jboss.logmanager.Logger rootLogger = org.jboss.logmanager.Logger.getLogger("");
+                    org.jboss.logmanager.Logger runLoggerJboss = org.jboss.logmanager.Logger.getLogger(getLoggerName());
+                    org.jboss.logmanager.Logger stateLoggerJboss = org.jboss.logmanager.Logger.getLogger(getStateLoggerName());
+                    try {
+                        fileHandler = new FileHandler(Paths.get(getOutputPath(),"run.log").toString());
+                        List<Handler> handlers = Arrays.asList(rootLogger.getHandlers());
+                        //stateLoggerJboss.addHandler(fileHander);
+                        runLoggerJboss.addHandler(fileHandler);
+
+                        runLogger = XLoggerFactory.getXLogger(getLoggerName());
+                        stateLogger = XLoggerFactory.getXLogger(getStateLoggerName());
+
+                        rootLogger.addHandler(fileHandler);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
                     }
-                    logAppender = FileAppender.newBuilder()
-                            //unique name for restart issue
-                            .setName(Run.RUN_LOGGER_NAME)
-                            .withFileName(Paths.get(getOutputPath(),"run.log").toString())
-                            .withImmediateFlush(true)
-                            .withAppend(false)
-                            .setLayout(
-                                    PatternLayout.newBuilder()
-                                            .withPattern("%d{HH:mm:ss.SSS} %msg%n%throwable")
-                                            .build()
-                            ).build();
-                    logAppender.start();
-                    ctx.updateLoggers();
-                    config.getLoggers().get(loggerName).addAppender(logAppender, Level.ALL,null);
-                    ctx.updateLoggers();
                 }
             }
         }
 
+//        if(logAppender == null || !logAppender.getFileName().contains(getOutputPath())){
+//            synchronized (this){
+//                final LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
+//                final Configuration config = ctx.getConfiguration();
+//                String loggerName = getLoggerName();
+//                LoggerConfig runLoggerConfig = LoggerConfig.createLogger(true, Level.INFO, loggerName,"false",new AppenderRef[0],null,config,null);
+//                config.addLogger(runLoggerConfig.getName(),runLoggerConfig);
+//                runLoggerConfig.setAdditive(true); //doesn't work
+//                runLogger = XLoggerFactory.getXLogger(loggerName);
+//                LoggerConfig stateLoggerConfig = LoggerConfig.createLogger(true, Level.ALL, runLogger.getName()+".state","false",new AppenderRef[0],null,config,null);
+//                stateLoggerConfig.setAdditive(true);
+//                config.addLogger(stateLoggerConfig.getName(),stateLoggerConfig);
+//                stateLogger = XLoggerFactory.getXLogger(getStateLoggerName());
+//                if (logAppender == null) {
+//                    Path outputPath = Paths.get(getOutputPath());
+//                    if(!Files.exists(outputPath)){
+//                        try {
+//                            Files.createDirectories(outputPath);
+//                        } catch (IOException e) {
+//                            logger.error("error creating output directory "+getOutputPath(),e);
+//                            return false;
+//                        }
+//                    }
+//                    logAppender = FileAppender.newBuilder()
+//                            //unique name for restart issue
+//                            .setName(Run.RUN_LOGGER_NAME)
+//                            .withFileName(Paths.get(getOutputPath(),"run.log").toString())
+//                            .withImmediateFlush(true)
+//                            .withAppend(false)
+//                            .setLayout(
+//                                    PatternLayout.newBuilder()
+//                                            .withPattern("%d{HH:mm:ss.SSS} %msg%n%throwable")
+//                                            .build()
+//                            ).build();
+//                    logAppender.start();
+//                    ctx.updateLoggers();
+//                    config.getLoggers().get(loggerName).addAppender(logAppender, Level.ALL,null);
+//                    ctx.updateLoggers();
+//                }
+//            }
+//        }
+//
+//
+//        return logAppender == null;
 
-        return logAppender == null;
+        return false;
     }
 
 

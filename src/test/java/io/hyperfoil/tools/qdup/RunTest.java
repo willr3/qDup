@@ -13,18 +13,18 @@ import io.hyperfoil.tools.qdup.config.yaml.Parser;
 import io.hyperfoil.tools.yaup.AsciiArt;
 import io.hyperfoil.tools.yaup.json.Json;
 import io.hyperfoil.tools.yaup.time.SystemTimer;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.*;
-import org.apache.logging.log4j.core.appender.AbstractAppender;
-import org.apache.logging.log4j.core.config.Configuration;
-import org.apache.logging.log4j.core.config.LoggerConfig;
-import org.apache.logging.log4j.core.config.Property;
-import org.apache.logging.slf4j.Log4jLogger;
+//import org.apache.logging.log4j.Level;
+//import org.apache.logging.log4j.LogManager;
+//import org.apache.logging.log4j.core.*;
+//import org.apache.logging.log4j.core.appender.AbstractAppender;
+//import org.apache.logging.log4j.core.config.Configuration;
+//import org.apache.logging.log4j.core.config.LoggerConfig;
+//import org.apache.logging.log4j.core.config.Property;
+//import org.apache.logging.slf4j.Log4jLogger;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.slf4j.LoggerFactory;
-import org.slf4j.ext.XLogger;
+//import org.slf4j.LoggerFactory;
+//import org.slf4j.ext.XLogger;
 
 import java.io.File;
 import java.io.InputStream;
@@ -46,21 +46,6 @@ import static org.junit.Assert.*;
 
 
 public class RunTest extends SshTestBase {
-
-   public static class ListAppender extends AbstractAppender {
-
-      private final List<LogEvent> log;
-
-      public ListAppender(String name, List<LogEvent> testLog) {
-         super(name, null, null, false, new Property[0]);
-         this.log = testLog;
-      }
-
-      @Override
-      public void append(LogEvent event) {
-         log.add(event);
-      }
-   }
 
 //    @Rule
 //    public final TestServer testServer = new TestServer();
@@ -264,26 +249,6 @@ public class RunTest extends SshTestBase {
       assertTrue("state should have foo",state.has("foo"));
       assertTrue("state should have bar",state.has("bar"));
       assertFalse("state should not have biz",state.has("biz"));
-   }
-   @Test
-   public void logger_removal(){
-
-      org.apache.logging.log4j.core.Logger logger = (org.apache.logging.log4j.core.Logger) LogManager.getLogger("foo");
-
-      LoggerContext loggerContext = (LoggerContext) LogManager.getContext(false);
-      Configuration configuration = loggerContext.getConfiguration();
-      LoggerConfig rootLoggerConfig = configuration.getLoggerConfig("");
-
-      List<LogEvent> events = new LinkedList<>();
-      ListAppender appender = new ListAppender("removal",events);
-
-      rootLoggerConfig.addAppender(appender, Level.ALL,null);
-
-      logger.addAppender(appender);
-      appender.start();
-      logger.setLevel(Level.ALL);
-      logger.trace("greetings");
-      LogManager.getRootLogger().info("hi mom");
    }
 
    @Test(timeout = 10_000)
@@ -995,11 +960,11 @@ public class RunTest extends SshTestBase {
       Dispatcher dispatcher = new Dispatcher();
       Run doit = new Run(tmpDir.toString(), config, dispatcher);
       doit.ensureLogger();//forcing the setup early
-      LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
-      Configuration cfg = ctx.getConfiguration();
-      String loggerName = "qdup."+doit.getOutputPath().replaceAll(FileSystems.getDefault().getSeparator(),"_");
-      cfg.getLoggerConfig(loggerName+".state").setLevel(Level.INFO);
-      ctx.updateLoggers();
+//      LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
+//      Configuration cfg = ctx.getConfiguration();
+//      String loggerName = "qdup."+doit.getOutputPath().replaceAll(FileSystems.getDefault().getSeparator(),"_");
+//      cfg.getLoggerConfig(loggerName+".state").setLevel(Level.INFO);
+//      ctx.updateLoggers();
       doit.run();
 
       String logContents = readFile(tmpDir.getPath().resolve("run.log"));
