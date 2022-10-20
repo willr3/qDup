@@ -25,6 +25,8 @@ import io.hyperfoil.tools.yaup.time.SystemTimer;
 //import org.apache.logging.log4j.core.config.Configuration;
 //import org.apache.logging.log4j.core.config.LoggerConfig;
 //import org.apache.logging.log4j.core.layout.PatternLayout;
+import org.jboss.logmanager.ExtHandler;
+import org.jboss.logmanager.formatters.PatternFormatter;
 import org.slf4j.Logger;
 import org.slf4j.ext.XLogger;
 import org.slf4j.ext.XLoggerFactory;
@@ -194,13 +196,14 @@ public class Run implements Runnable, DispatchObserver {
         if(this.fileHandler == null){
             synchronized (this){
                 if(this.fileHandler == null){
+                    System.out.println("----------------------");
                     org.jboss.logmanager.Logger rootLogger = org.jboss.logmanager.Logger.getLogger("");
                     org.jboss.logmanager.Logger runLoggerJboss = org.jboss.logmanager.Logger.getLogger(getLoggerName());
                     org.jboss.logmanager.Logger stateLoggerJboss = org.jboss.logmanager.Logger.getLogger(getStateLoggerName());
                     try {
                         fileHandler = new FileHandler(Paths.get(getOutputPath(),"run.log").toString());
+                        fileHandler.setFormatter(new PatternFormatter("%d{HH:mm:ss} %-5p [%c] (%t) %s%e%n"));
                         List<Handler> handlers = Arrays.asList(rootLogger.getHandlers());
-                        //stateLoggerJboss.addHandler(fileHander);
                         runLoggerJboss.addHandler(fileHandler);
 
                         runLogger = XLoggerFactory.getXLogger(getLoggerName());
