@@ -33,6 +33,9 @@ import static org.junit.Assert.assertTrue;
 public class SshTestBase {
 
 
+    public static final String KEY = "qdup_rsa";
+    public static final String PUB = KEY+".pub";
+
     protected TmpDir tmpDir;
 
     @Before
@@ -50,7 +53,7 @@ public class SshTestBase {
     private static final ScheduledThreadPoolExecutor SCHEDULED_THREAD_POOL_EXECUTOR = new ScheduledThreadPoolExecutor(2);
 
     public RunConfigBuilder getBuilder(){
-        return getBuilder("qdup");
+        return getBuilder(KEY);
     }
     public RunConfigBuilder getBuilder(String name){
         RunConfigBuilder builder = new RunConfigBuilder();
@@ -97,7 +100,7 @@ public class SshTestBase {
 
 
     public String getIdentity() {
-        return getPath("keys/qdup").toFile().getPath();
+        return getPath("keys/"+KEY).toFile().getPath();
     }
 
     static Path getPath(String subDir){
@@ -126,7 +129,7 @@ public class SshTestBase {
 
     @BeforeClass
     public static void createContainer() {
-        setup(getPath("keys/qdup.pub"));
+        setup(getPath("keys/"+PUB));
 
     }
     public static void setup(Path pubPath ){
