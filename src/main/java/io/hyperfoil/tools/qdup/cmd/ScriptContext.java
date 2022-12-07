@@ -45,6 +45,42 @@ public class ScriptContext implements Context, Runnable{
         }
     }
 
+    /**
+     * Tracks the future for a Cmd's timer and the associated parent cmd with the timer
+     */
+    private class TimerEntry {
+        private ScheduledFuture<?> future;
+        private Cmd target;
+        private Cmd toRun;
+
+        public TimerEntry(Cmd target, ScheduledFuture future, Cmd toRun){
+            this.target = target;
+            this.future = future;
+            this.toRun = toRun;
+        }
+
+        public Cmd getToRun(){return toRun;}
+        public Cmd getTarget(){return target;}
+        public ScheduledFuture getFuture(){return future;}
+        public void cancel(Cmd current){
+            cancel(current,false);
+        }
+
+        /**
+         * only cancel if forced or the target is not a loop ancestor of the current command
+         * @param current
+         * @param force
+         */
+        public void cancel(Cmd current,boolean force){
+            if(force || current == null || !(target instanceof LoopCmd && current.hasAncestor(target))){
+                getFuture().cancel(false);
+            }
+        }
+    }
+
+    /**
+     * calls next if the target command is still the active command, otherwise skip
+     */
     private class ActiveCheckCmd extends Cmd{
 
         private Cmd target;
@@ -55,7 +91,8 @@ public class ScriptContext implements Context, Runnable{
 
         @Override
         public void run(String input, Context context) {
-            if(target.equals(currentCmd)){
+            //TODO do we check if the target is a parent loop?
+            if(target.equals(currentCmd) || ( (target instanceof LoopCmd) && currentCmd.hasAncestor(target) )){
                 context.next(input);
             }else{
                 context.skip(input);
@@ -85,7 +122,7 @@ public class ScriptContext implements Context, Runnable{
 
     private AtomicInteger sessionCounter = new AtomicInteger(1);
 
-    private List<ScheduledFuture<?>> timeouts;
+    private List<TimerEntry> timeouts;
 
     private volatile Cmd currentCmd;
     private final Map<String,Cmd> signalCmds = new HashMap<>();
@@ -144,8 +181,8 @@ public class ScriptContext implements Context, Runnable{
         this.lineQueue = new LinkedBlockingQueue<>();
         this.timeouts = new LinkedList<>();
     }
-    private void clearTimers(){
-        timeouts.forEach(timeout->timeout.cancel(true));
+    private void clearTimers(Cmd currentCmd){
+        timeouts.forEach(timeout->timeout.cancel(currentCmd));
     }
 
     public ScriptContext newChildContext(SystemTimer timer,Cmd root){
@@ -304,64 +341,47 @@ public class ScriptContext implements Context, Runnable{
         lineQueue.add(CLOSE_QUEUE);
     }
 
-    @Override
-    public void next(String output) {
-        getContextTimer().start("next");
-        clearTimers();
-        Cmd cmd = getCurrentCmd();
+
+    private void advanceCommand(Cmd currentCmd, Cmd nextCmd, String output){
+        clearTimers(nextCmd);
         if(!signalCmds.isEmpty()){
             signalCmds.forEach((name,onsignal)->{
                 getCoordinator().removeWaiter(name,onsignal);
             });
             signalCmds.clear();
         }
-        observerPreNext(cmd,output);
-        if(cmd!=null) {
-            if(cmd.hasWatchers()){
+        if(currentCmd!=null){
+            if(currentCmd.hasWatchers()){
                 closeLineQueue();
             }
-            cmd.setOutput(output);
-            cmd.postRun(output,this);
-            Cmd toCall = cmd.getNext();
-            boolean changed = setCurrentCmd(cmd,toCall);
+            currentCmd.postRun(output,this);
+            boolean changed = setCurrentCmd(currentCmd,nextCmd);
             if(changed) {
                 startCurrentCmd();
             }else{
                 //TODO how to handle failing to change?
-                System.out.printf("%s%n",AsciiArt.ANSI_BLUE+"failed to change to "+toCall+AsciiArt.ANSI_RESET);
+                System.out.printf("%s%n",AsciiArt.ANSI_BLUE+"failed to change to "+nextCmd+AsciiArt.ANSI_RESET);
             }
         }
+    }
+    @Override
+    public void next(String output) {
+        getContextTimer().start("next");
+        Cmd cmd = getCurrentCmd();
+        cmd.setOutput(output);
+        Cmd toCall = cmd.getNext();
+        observerPreNext(cmd,output);
+        advanceCommand(cmd,toCall,output);
     }
 
     @Override
     public void skip(String output) {
         getContextTimer().start("skip");
-        clearTimers();
         Cmd cmd = getCurrentCmd();
-
-        if(!signalCmds.isEmpty()){
-            signalCmds.forEach((name,onsignal)->{
-                getCoordinator().removeWaiter(name,onsignal);
-            });
-            signalCmds.clear();
-        }
+        cmd.setOutput(output);
+        Cmd toCall = cmd.getSkip();
         observerPreSkip(cmd,output);
-        if(cmd!=null) {
-            if(cmd.hasWatchers()){
-                closeLineQueue();
-            }
-            cmd.setOutput(output);
-            cmd.postRun(output,this);
-            boolean changed = setCurrentCmd(cmd,cmd.getSkip());
-
-            if(changed) {
-                startCurrentCmd();
-            }else{
-
-            }
-        }else{
-
-        }
+        advanceCommand(cmd,toCall,output);
     }
     protected void startCurrentCmd(){
         Run run = getRun();
@@ -405,7 +425,6 @@ public class ScriptContext implements Context, Runnable{
 
     private void addTimer(Cmd toWatch,Cmd toRun,long timeout){
         ScheduledFuture future = run.getDispatcher().getScheduler().schedule(()->{
-            if(toWatch.equals(getCurrentCmd())){
                 toRun.doRun(""+timeout,new SyncContext(
                     this.getSession(),
                     this.getState(),
@@ -414,9 +433,8 @@ public class ScriptContext implements Context, Runnable{
                     toRun,
                    this
                 ));
-            }
         },timeout,TimeUnit.MILLISECONDS);
-        timeouts.add(future);
+        timeouts.add(new TimerEntry(toWatch,future,toRun));
     }
 
     @Override
@@ -449,6 +467,7 @@ public class ScriptContext implements Context, Runnable{
             long timestamp = System.currentTimeMillis();
             setStartTime(timestamp);
             setUpdateTime(timestamp);
+            //TODO need to only queue signal watchers the first time loopCmd
             if (cmd.hasSignalWatchers()){
                 Supplier<String> inputSupplier = ()->getSession().peekOutput();
                 for(String name : cmd.getSignalNames()){
@@ -467,17 +486,25 @@ public class ScriptContext implements Context, Runnable{
                     getCoordinator().waitFor(populatedName,root,syncContext,inputSupplier);
                 }
             }
-            if (cmd.hasTimers()) {
+            //timeouts won't be empty if cmd is a loopCmd that already queued timeouts
+            if (cmd.hasTimers() && timeouts.isEmpty()) {
                 for (Long timeout : cmd.getTimeouts()) {
                     List<Cmd> toCall = cmd.getTimers(timeout);
                     Cmd noOp = Cmd.NO_OP(""+timeout);
                     noOp.setStateParent(cmd);
                     toCall.forEach(noOp::then);
+                    //considering adding
+                    Cmd activeCmd = new ActiveCheckCmd(cmd);
+                    activeCmd.setParent(cmd);
+                    toCall.forEach(activeCmd::then
+                    );
+                    //
                     addTimer(
                         cmd,
-                        noOp,
+                        activeCmd,/*noOp,*/
                         timeout
                     );
+
                 }
             }
             if (cmd.hasWatchers()) {

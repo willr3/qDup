@@ -426,6 +426,14 @@ public abstract class Cmd {
    }
 
 
+   public boolean hasAncestor(Cmd toCheck){
+      Cmd target = this;
+      boolean rtrn = false;
+      do {
+         rtrn = toCheck.equals(target);
+      }while(!rtrn && target.hasParent() && (target = target.getParent())!= null);
+      return rtrn;
+   }
    public <T> List<T> walk(CmdLocation location, Function<Cmd,T> converter){
       LinkedList<T> rtrn = new LinkedList<>();
       walk((cmd,b)->converter.apply(cmd), location,rtrn);
@@ -1006,6 +1014,7 @@ public abstract class Cmd {
          context.log(toLog);
       }
    }
+
 
 
    public String getLogOutput(String output, Context context) {
