@@ -1,9 +1,12 @@
 = countdown
 
-Decrease a `name` counter which starts with `initial`.
-Child commands will be invoked each time after `name` counter reaches 0.
+Decrease a counter from an  `initial` value.
+Child commands will be invoked each time after the counter reaches 0. A `name` can be used to share the counter across other scripts make it accesible to `js` via `QD.counters`.
 
 [source,yaml]
 ----
-- countdown: myvar 5
+- countdown: 5 #private counter
+- countdown: myvar 5 #accessible by name
 ----
+
+NOTE: using a named counter requires all instances use the same initial value. qDup will raise an error if the values are different.

@@ -107,10 +107,11 @@ public class Parser {
                 Countdown.class,
                 "countdown",
                 (cmd) -> (cmd.getName() + " " + cmd.getInitial()),
-
                 (str,prefix,suffix) -> {
                     List<String> split = Parser.split(str,prefix,suffix);
-                    if (split.size() == 2) {
+                    if (split.size() == 1 && split.get(0).matches("\\d+")){
+                        return new Countdown(Integer.parseInt(split.get(0)));
+                    } else if (split.size() == 2 && split.get(1).matches("\\d+")) {
                         return new Countdown(split.get(0), Integer.parseInt(split.get(1)));
                     } else {
                         throw new YAMLException("cannot create countdown from " + str);

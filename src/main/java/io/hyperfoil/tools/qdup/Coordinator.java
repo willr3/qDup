@@ -66,6 +66,7 @@ public class Coordinator {
     private Map<String,List<Waiter>> waitFors;
 
     private Map<String,AtomicInteger> counters;
+    private Map<String,Integer> countersInitial;
 
     private final Globals globals;
 
@@ -73,6 +74,7 @@ public class Coordinator {
         signalLatches = new HashMap<>();
         latchTimes = new LinkedHashMap<>();
         counters = new HashMap<>();
+        countersInitial = new HashMap<>();
         observers = new LinkedList<>();
         waitFors = new ConcurrentHashMap<>();
         this.globals = globals;
@@ -97,6 +99,10 @@ public class Coordinator {
         return rtrn;
     }
 
+    public int getCounterInitial(String name){
+        return countersInitial.get(name);
+    }
+
     public void addObserver(Consumer<String> observer){
         observers.add(observer);
     }
@@ -118,24 +124,32 @@ public class Coordinator {
         return rtrn;
     }
 
+    public boolean hasCounter(String name){
+        return countersInitial.containsKey(name);
+    }
     public void setCounter(String name, int value){
-        counters.put(name,new AtomicInteger(value));
+        synchronized (countersInitial) {
+            if(!countersInitial.containsKey(name)){
+                countersInitial.putIfAbsent(name,value);
+                counters.put(name, new AtomicInteger(value));
+            }
+        }
     }
     public int increase(String name){
-        if(!counters.containsKey(name)){
-            counters.put(name,new AtomicInteger(0));
+        if(!hasCounter(name)){
+            setCounter(name,0);
         }
         return counters.get(name).incrementAndGet();
     }
     public int decrease(String name, int initialValue){
-        if(!counters.containsKey(name)){
-            counters.put(name,new AtomicInteger(initialValue));
+        if(!hasCounter(name)){
+            setCounter(name,initialValue);
         }
         return counters.get(name).decrementAndGet();
     }
     public int getCounter(String name){
-        if(!counters.containsKey(name)){
-            counters.put(name,new AtomicInteger(0));
+        if(!hasCounter(name)){
+            setCounter(name,0);
         }
         return counters.get(name).get();
 
