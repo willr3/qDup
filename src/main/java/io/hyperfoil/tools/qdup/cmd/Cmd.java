@@ -4,7 +4,6 @@ import io.hyperfoil.tools.qdup.Coordinator;
 import io.hyperfoil.tools.qdup.SecretFilter;
 import io.hyperfoil.tools.qdup.State;
 import io.hyperfoil.tools.qdup.cmd.impl.*;
-import io.hyperfoil.tools.qdup.config.RunRule;
 import io.hyperfoil.tools.qdup.config.rule.CmdLocation;
 import io.hyperfoil.tools.qdup.config.yaml.Parser;
 import io.hyperfoil.tools.yaup.HashedLists;
@@ -854,10 +853,21 @@ public abstract class Cmd {
    public Cmd getParent(){return parent;}
    public boolean hasStateParent(){return stateParent!=null;}
    public Cmd getStateParent(){return stateParent;}
+
+   /**
+    * sets command as the parent for this. A parent controls the flow of state values from with and determines the next sibling for getNext and getSkip.
+    * Settings the parent automatically makes it the state parent as well.
+    * @param command
+    */
    public void setParent(Cmd command){
       this.parent = command;
       setStateParent(command);
    }
+
+   /**
+    * sets command as the stat parent for this. A state parent is used for the flow of state values from with but does not add siblings for getNext or getSkip
+    * @param command
+    */
    public void setStateParent(Cmd command){
       this.stateParent = command;
    }

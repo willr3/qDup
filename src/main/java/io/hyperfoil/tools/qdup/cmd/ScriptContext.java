@@ -495,13 +495,13 @@ public class ScriptContext implements Context, Runnable{
                     toCall.forEach(noOp::then);
                     //considering adding
                     Cmd activeCmd = new ActiveCheckCmd(cmd);
-                    activeCmd.setParent(cmd);
+                    activeCmd.setStateParent(cmd);
                     toCall.forEach(activeCmd::then
                     );
                     //
                     addTimer(
                         cmd,
-                        activeCmd,/*noOp,*/
+                        activeCmd,/*activeCmd,/*noOp,*/
                         timeout
                     );
 
