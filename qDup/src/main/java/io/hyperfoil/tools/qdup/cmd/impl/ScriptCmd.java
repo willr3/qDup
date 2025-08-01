@@ -15,7 +15,7 @@ It needs to inject the script command tree when run as a phase reference
 Injecting when referenced inside a script causes it to break when the injection is in a loop
     It cannot inject each time it is called but does need to change the Context currentCmd or inject the first time?
  */
-public class ScriptCmd extends Cmd {
+public class ScriptCmd extends NamedCmd {
     /**
      * Used to ensure script then's are called after the script with input from the script
      */
@@ -45,7 +45,6 @@ public class ScriptCmd extends Cmd {
         }
     }
 
-    private final String name;
     private final boolean async;
     private final boolean addToCmdTree;
     private Cmd foundScript = null;
@@ -62,7 +61,7 @@ public class ScriptCmd extends Cmd {
         this(name,false,false);
     }
     public ScriptCmd(String name,boolean async, boolean addToCmdTree){
-        this.name = name;
+        super(name);
         this.async = async;
         this.addToCmdTree = addToCmdTree;
     }
@@ -72,10 +71,10 @@ public class ScriptCmd extends Cmd {
         if(populatedName != null){
             return populatedName;
         }
-        return name;
+        return super.getName();
     }
     @Override
-    public String toString(){return "script-cmd: " + name;}
+    public String toString(){return "script-cmd: " + getName();}
 
     @Override
     public Cmd getNext() {
@@ -107,7 +106,7 @@ public class ScriptCmd extends Cmd {
     @Override
     public void run(String input, Context context) {
         clearToCall();
-        populatedName = populateStateVariables(name,this,context);
+        populatedName = populateStateVariables(getName(),this,context);
 
         Script toCall = context.getScript(populatedName,this);
         Cmd originalNext = getNext();
@@ -146,7 +145,7 @@ public class ScriptCmd extends Cmd {
 
     @Override
     public Cmd copy() {
-        return new ScriptCmd(name,async,addToCmdTree);
+        return new ScriptCmd(super.getName(),async,addToCmdTree);
     }
 
 }
