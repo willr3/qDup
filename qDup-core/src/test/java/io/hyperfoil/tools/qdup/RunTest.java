@@ -1370,6 +1370,7 @@ public class RunTest extends SshTestBase {
       assertFalse("runConfig errors:\n" + config.getErrorStrings().stream().collect(Collectors.joining("\n")), config.hasErrors());
       Dispatcher dispatcher = new Dispatcher();
       Run doit = new Run(tmpDir.toString(), config, dispatcher);
+      doit.ensureConsoleLogging();
       doit.run();
       //TODO exists checks the file is in the testcontainer, not the qDup created container
       //we do NOT want the file to exist in the test container

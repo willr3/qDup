@@ -2,7 +2,9 @@ package io.hyperfoil.tools.qdup.config;
 
 import io.hyperfoil.tools.qdup.Env;
 import io.hyperfoil.tools.qdup.Host;
+import io.hyperfoil.tools.qdup.Stage;
 import io.hyperfoil.tools.qdup.cmd.impl.ScriptCmd;
+import io.hyperfoil.tools.yaup.HashedLists;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,9 +16,7 @@ public class Role {
     private Set<String> hostRefs;
     private List<Host> hosts;
     private Map<Host,Env> environments;
-    private List<ScriptCmd> setup;
-    private List<ScriptCmd> run;
-    private List<ScriptCmd> cleanup;
+    private HashedLists<Stage,ScriptCmd> scripts;
 
     public Role(){
         this("");
@@ -26,11 +26,15 @@ public class Role {
         this.hostExpression=null;
         this.hostRefs = new HashSet<>();
         this.hosts = new ArrayList<>();
-        this.setup = new ArrayList<>();
-        this.run = new ArrayList<>();
-        this.cleanup = new ArrayList<>();
         this.environments = new ConcurrentHashMap<>();
+        this.scripts = new HashedLists<>();
     }
+
+    public List<ScriptCmd> getStage(Stage stage){
+        return Collections.unmodifiableList(scripts.get(stage));
+    }
+
+
     public boolean hasHostExpression(){return hostExpression!=null;}
     public void setHostExpression(HostExpression expression){
         this.hostExpression = expression;
@@ -50,11 +54,11 @@ public class Role {
     public String getName(){
         return name;
     }
-    public List<ScriptCmd> getSetup(){return Collections.unmodifiableList(setup);}
-    public List<ScriptCmd> getRun(){return Collections.unmodifiableList(run);}
-    public List<ScriptCmd> getCleanup(){return Collections.unmodifiableList(cleanup);}
+    public List<ScriptCmd> getSetup(){return getStage(Stage.Setup);}
+    public List<ScriptCmd> getRun(){return getStage(Stage.Run);}
+    public List<ScriptCmd> getCleanup(){return getStage(Stage.Cleanup);}
     public boolean hasScripts(){
-        return !(setup.isEmpty() && run.isEmpty() && cleanup.isEmpty());
+        return !scripts.isEmpty();
     }
 
     /**
@@ -78,13 +82,13 @@ public class Role {
     }
 
     public void addSetup(ScriptCmd script){
-        this.setup.add(script);
+        this.scripts.put(Stage.Setup,script);
     }
     public void addRun(ScriptCmd script){
-        this.run.add(script);
+        this.scripts.put(Stage.Run,script);
     }
     public void addCleanup(ScriptCmd script){
-        this.cleanup.add(script);
+        this.scripts.put(Stage.Cleanup,script);
     }
     public void addHost(Host host){
         this.hosts.add(host);

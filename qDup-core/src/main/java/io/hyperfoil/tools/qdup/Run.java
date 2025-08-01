@@ -35,7 +35,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.logging.Level;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import static io.hyperfoil.tools.qdup.cmd.PatternValuesMap.QDUP_GLOBAL;
 import static io.hyperfoil.tools.qdup.cmd.PatternValuesMap.QDUP_GLOBAL_ABORTED;
@@ -52,6 +51,7 @@ public class Run implements Runnable, DispatchObserver {
     private static final Logger logger = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
     private final static AtomicReferenceFieldUpdater<Run,Stage> stageUpdated = AtomicReferenceFieldUpdater.newUpdater(Run.class, Stage.class,"stage");
+    //private final static AtomicReferenceFieldUpdater<Run,Integer> stageIndexUpdate = AtomicReferenceFieldUpdater.newUpdater(Run.class, Integer.class,"stageIndex");
 
     //TODO does a static logger name retain file appenders from previous Runs?
 
@@ -81,6 +81,7 @@ public class Run implements Runnable, DispatchObserver {
     }
 
     private volatile Stage stage;
+    private volatile Integer stageIndex = -1;
 
     private final List<RunObserver> runObservers;
 
@@ -105,6 +106,9 @@ public class Run implements Runnable, DispatchObserver {
     org.jboss.logmanager.Logger internalRunLogger;
     org.jboss.logmanager.Logger internalStateLogger;
 
+    private List<Stage> stages;
+
+
     private List<Stage> skipStages;
 
     public Run(String outputPath,RunConfig config,Dispatcher dispatcher){
@@ -126,7 +130,11 @@ public class Run implements Runnable, DispatchObserver {
         this.profiles = new Profiles();
         this.coordinator = new Coordinator(config.getGlobals());
         this.local = new Local(config);
+
         this.skipStages = config.getSkipStages();
+        this.stages = Arrays.asList(Stage.Setup,Stage.Run,Stage.Cleanup,Stage.Done);
+
+        this.stages.removeAll(this.skipStages);
 
         coordinator.addObserver((signal_name)->{
             runLogger.infof(
@@ -247,7 +255,21 @@ public class Run implements Runnable, DispatchObserver {
                 observer.postStage(stage);
             }
         }
-        switch (stage){
+        if(stageIndex >= 0 && stageIndex < stages.size()) {
+            Stage currentStage = stages.get(stageIndex);
+            if (currentStage.isPostDownload()) {
+                runPendingDownloads();
+            }
+        }
+        stageIndex++;
+        if(stageIndex >= stages.size()){
+            postRun();
+            return false;
+        }
+        Stage targetStage = stages.get(stageIndex);
+        startDispatcher = queueStage(targetStage);
+
+/*        switch (stage){
             case Pending:
                 //removed because no longer want to use cmds to create tmp_dir
 //                if(stageUpdated.compareAndSet(this,Stage.Pending, Stage.PreSetup)){
@@ -317,7 +339,7 @@ public class Run implements Runnable, DispatchObserver {
                     postRun();
                     break;
                 }
-        }
+        }*/
         if(startDispatcher){
             if(hasRunObserver()){
                 for(RunObserver observer: runObservers){
@@ -557,6 +579,7 @@ public class Run implements Runnable, DispatchObserver {
             Thread.currentThread().interrupt();
             return false;
         }
+
     }
     private boolean connectAll(List<Callable<Boolean>> toCall,int timeout){
         boolean ok = false;
@@ -577,7 +600,7 @@ public class Run implements Runnable, DispatchObserver {
                 }
                 return rtrn;
             })
-                    .collect(Collectors.reducing(Boolean::logicalAnd)).get();
+                    .reduce(Boolean::logicalAnd).orElse(false);
 
         } catch (InterruptedException e) {
             e.printStackTrace();
@@ -732,9 +755,109 @@ public class Run implements Runnable, DispatchObserver {
         }
         return ok;
     }
+    private boolean queueStage(Stage targetStage){
+        logger.debugf("%s.%s",this,stage.getName());
+        List<Callable<Boolean>> connectSessions = new LinkedList<>();
+        Role allRole = config.getRole(RunConfigBuilder.ALL_ROLE);
+        config.getRoleNames().forEach(roleName->{
+            final Role role = config.getRole(roleName);
+            List<NamedCmd> toCall = new ArrayList<>();
+            if(!role.getStage(targetStage).isEmpty()){
+                if(targetStage.isSequential()){
+                    final Script sequential = new Script(targetStage.name());
+                    if(targetStage.setEnv()){
+                        sequential.then(new RoleEnv(role,true));
+                    }
+                    role.getStage(targetStage).forEach(cmd->{
+                        sequential.then(cmd);
+                    });
+                    if(targetStage.setEnv()){
+                        sequential.then(new RoleEnv(role,false));
+                    }
+                    toCall.add(sequential);
+                }else{
+                    toCall.addAll(role.getStage(targetStage));
+                }
+                for(NamedCmd script : toCall){
+                    for(Host host : role.getHosts(config)){
+                        NamedCmd copy = (NamedCmd)script.deepCopy();
+                        //TODO should we change back to host name instead of short name?
+                        State hostState = config.getState().getChild(host.getShortHostName(), State.HOST_PREFIX);
+                        State scriptState = hostState.getChild(copy.getName()).getChild("id="+copy.getUid());
+                        String profileName = copy.getName()+"-"+copy.getUid()+"@"+host.getShortHostName();
+                        SystemTimer timer = profiles.get(profileName);
+                        profiles.getProperties(profileName).set("host",host.getShortHostName());
+                        profiles.getProperties(profileName).set("role",role.getName());
+                        profiles.getProperties(profileName).set("script",copy.getName());
+                        profiles.getProperties(profileName).set("scriptId",copy.getUid());
+                        Env env = role.hasEnvironment(host) ? role.getEnv(host) : new Env();
+                        if(!role.getName().equals(RunConfigBuilder.ALL_ROLE) && allRole!=null && allRole.hasEnvironment(host)){
+                            env.merge(allRole.getEnv(host));
+                        }
+                        String setupCommand = env.getDiff().getCommand();
+                        connectSessions.add(()->{
+                            String name = copy.getName()+":"+copy.getUid()+"@"+host.getShortHostName()+"."+Cmd.populateStateVariables(config.getGlobals().getSettings().getString(RunConfig.TRACE_NAME),null,getConfig().getState(),getCoordinator(),Json.fromMap(getTimestamps()));
+                            timer.start("connect:" + host.toString());
+                            AbstractShell shell = AbstractShell.getShell(
+                                    name,
+                                    host,
+                                    setupCommand,
+                                    getDispatcher().getCallback(),
+                                    getConfig().getState().getSecretFilter(),
+                                    isTrace(name)
+                            );
+                            shell.setName(name);
+                            if (shell.isReady()) {
+                                timer.start("context:" + host.toString());
+                                ScriptContext scriptContext = new ScriptContext(
+                                        shell,
+                                        scriptState,
+                                        this,
+                                        timer,
+                                        copy,
+                                        (Boolean)config.getGlobals().getSetting("check-exit-code",false)
+                                );
+                                scriptContext.setRoleName(role.getName());
+                                if(config.isStreamLogging()){
+                                    shell.addLineObserver("stream",(line)->{
+                                        ensureLogger();
+                                        scriptContext.log(line);
+                                    });
+                                }
+                                getDispatcher().addScriptContext(scriptContext);
+                                boolean rtrn = shell.isOpen();
+                                timer.start("waiting for start");
+                                return rtrn;
+                            } else {
+                                logger.error(targetStage.getName()+" failed to connect "+host.getSafeString()
+                                        +(host.hasContainerId() ? " "+host.getContainerId() : "")
+                                        +(host.hasPassword() ?
+                                        ", verify ssh works with the provided username and password" :
+                                        ", verify password-less ssh works with the selected keys"
+                                                +"\n"+shell.peekOutput())
+                                );
+                                shell.close();
+                                return false;
+                            }
+                        });
+                    }
+                }
+            }
+        });
+        boolean ok = true;
+        if(!connectSessions.isEmpty()) {
+            ok = connectAll(connectSessions, 60);
+            if (!ok) {
+                getRunLogger().error("failed to connect all ssh sessions for "+targetStage.name());
+                abort(true);
+            }
+        }else{
+            //there is nothing for this stage
+        }
+        return ok;
+    }
     private boolean queueSetupScripts(){
         logger.debugf("%s.setup",this);
-
         //Observer to set the Env.Diffs
         List<Callable<Boolean>> connectSessions = new LinkedList<>();
         //TODO don't run an ALL-setup but rather put it in the start of each connection?

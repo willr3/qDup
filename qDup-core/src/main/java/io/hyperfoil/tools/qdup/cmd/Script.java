@@ -4,15 +4,10 @@ package io.hyperfoil.tools.qdup.cmd;
  * Created by wreicher
  * The starting Cmd for a sequence of Cmd that will run against a remote SshSession
  */
-public class Script extends Cmd {
-    private String name;
+public class Script extends NamedCmd {
 
     public Script(String name) {
-        this.name = name;
-    }
-
-    public String getName() {
-        return name;
+        super(name);
     }
 
     @Override
@@ -33,9 +28,9 @@ public class Script extends Cmd {
 
     @Override
     public Cmd copy() {
-        return new Script(this.name);
+        return new Script(super.getName());
     }
 
     @Override
-    public String toString() { return this.name; }
+    public String toString() { return super.getName(); }
 }
