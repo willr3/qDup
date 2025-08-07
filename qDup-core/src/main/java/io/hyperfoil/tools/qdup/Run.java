@@ -132,7 +132,7 @@ public class Run implements Runnable, DispatchObserver {
         this.local = new Local(config);
 
         this.skipStages = config.getSkipStages();
-        this.stages = Arrays.asList(Stage.Setup,Stage.Run,Stage.Cleanup,Stage.Done);
+        this.stages = new ArrayList<>(List.of(Stage.Setup,Stage.Run,Stage.Cleanup,Stage.Done));
 
         this.stages.removeAll(this.skipStages);
 
@@ -263,6 +263,7 @@ public class Run implements Runnable, DispatchObserver {
         }
         stageIndex++;
         if(stageIndex >= stages.size()){
+            runPendingDownloads(); //added incase fo abort
             postRun();
             return false;
         }
@@ -483,11 +484,18 @@ public class Run implements Runnable, DispatchObserver {
             coordinator.clearWaiters();
             if (!skipCleanUp && stage.isBefore(Stage.Cleanup)) {
                 stageUpdated.set(this, Stage.Run);//set the stage as run so dispatcher.stop call to DispatchObserver.postStop will set it to Cleanup
+                if(stages.contains(Stage.Cleanup)){
+                    stageIndex = stages.indexOf(Stage.Cleanup)-1;
+                }else{
+                    stageIndex = stages.size();
+                }
             } else {
                 logger.warn("Skipping cleanup - Abort has been defined to not run any cleanup scripts");
                 stageUpdated.set(this, Stage.PostCleanup);//set the stage as PostCleanup so dispatcher.stop call to DispatchObserver.postStop will set it to Done
+                stageIndex = stages.size();
 
             }
+
             dispatcher.stop(false);//interrupts working threads and stops dispatching next commands
             //runPendingDownloads();//added here in addition to queueCleanupScripts to download when run aborts
             //abort doesn't end the run, cleanup ends the run
