@@ -400,6 +400,7 @@ public class ContainerShell extends AbstractShell{
                     logger.error("failed to populate pattern to stop container\n"+populatedCommand+"\n"+getHost());
                 }else{
                     String response = closeShell.shSync(populatedCommand);
+                    logger.debugf(getName()+" "+HostDefinition.STOP_CONTAINER+"\n"+response);
                     //
                 }
                 if ( closeShell != null && closeShell.status != Status.Closing) {

@@ -484,7 +484,7 @@ public class Run implements Runnable, DispatchObserver {
             coordinator.clearWaiters();
             if (!skipCleanUp && stage.isBefore(Stage.Cleanup)) {
                 stageUpdated.set(this, Stage.Run);//set the stage as run so dispatcher.stop call to DispatchObserver.postStop will set it to Cleanup
-                if(stages.contains(Stage.Cleanup)){
+                if(stages.contains(Stage.Cleanup) && stageIndex < stages.indexOf(Stage.Cleanup)-1){
                     stageIndex = stages.indexOf(Stage.Cleanup)-1;
                 }else{
                     stageIndex = stages.size();
