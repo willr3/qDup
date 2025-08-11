@@ -19,7 +19,7 @@ public class RunError {
 
     @Override
     public String toString(){
-        return "Error: "+message+"\n  role: "+role+" stage: "+stage.getName()+" script: "+script+"\n  command: "+command;
+        return "Error: "+message+"\n  role: "+role+" stage: "+(stage!=null ? stage.getName(): "null")+" script: "+script+"\n  command: "+command;
     }
 
     public String getRole() {

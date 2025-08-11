@@ -1175,7 +1175,7 @@ public abstract class Cmd {
       return getExternalStateReferences(Parser.getInstance(),builder);
    }
    public List<String> getExternalStateReferences(Parser parser, RunConfigBuilder builder){
-      CmdLocation location = new CmdLocation("", Stage.Setup,"","", CmdLocation.Position.Child);
+      CmdLocation location = new CmdLocation("",builder.getStages().get(0),"","", CmdLocation.Position.Child);
       Cmd.Ref ref = new Cmd.Ref(this);
       UndefinedStateVariables udsv = new UndefinedStateVariables(parser);
       RunSummary runSummary = new RunSummary();

@@ -51,7 +51,7 @@ public class QDup {
     private boolean colorTerminal;
     private int jsonPort;
 
-    private List<Stage> skipStages;
+    private Set<String> skipStageNames;
 
     private boolean exitCode = false;
 
@@ -134,11 +134,11 @@ public class QDup {
     }
 
     public boolean hasSkipStages(){
-        return !skipStages.isEmpty();
+        return !skipStageNames.isEmpty();
     }
 
-    public List<Stage> getSkipStages(){
-        return skipStages;
+    public Set<String> getSkipStages(){
+        return skipStageNames;
     }
 
     public String getRunDebug(){ return config == null ? null : config.debug(true); };
@@ -399,7 +399,7 @@ public class QDup {
             trace = getOpt(commandLine, "trace", "");
             traceName = commandLine.getOptionValue("traceName",""+uid);
 
-            skipStages = commandLine.hasOption("skip-stages") ? Arrays.asList(commandLine.getOptionValues("skip-stages")).stream().map(str->StringUtil.getEnum(str,Stage.class,Stage.Invalid)).collect(Collectors.toList()) : Collections.EMPTY_LIST;
+            skipStageNames = commandLine.hasOption("skip-stages") ? Arrays.stream(commandLine.getOptionValues("skip-stages")).map(String::toLowerCase).collect(Collectors.toSet()) : Collections.EMPTY_SET;
             streamLogging = commandLine.hasOption(Globals.STREAM_LOGGING);
 
             if (commandLine.hasOption("basePath")) {
@@ -665,7 +665,7 @@ public class QDup {
                         if (mainThread.isPresent()) {
                             run.joinLatch(120,TimeUnit.SECONDS);
                         }
-                    } else if (Stage.Cleanup.equals(run.getStage()) && dispatcher.isRunning() && !dispatcher.isStopping()){
+                    } else if (Stage.CLEANUP.equals(run.getStage()) && dispatcher.isRunning() && !dispatcher.isStopping()){
                         run.abort(true);
                     }
                 });

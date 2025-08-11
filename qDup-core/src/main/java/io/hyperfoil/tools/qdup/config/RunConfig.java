@@ -4,7 +4,6 @@ import io.hyperfoil.tools.qdup.*;
 import io.hyperfoil.tools.qdup.cmd.Cmd;
 import io.hyperfoil.tools.qdup.cmd.Script;
 import io.hyperfoil.tools.qdup.config.yaml.Parser;
-import io.hyperfoil.tools.qdup.config.yaml.YamlFile;
 import io.hyperfoil.tools.yaup.Counters;
 import io.hyperfoil.tools.yaup.json.Json;
 import org.jboss.logging.Logger;
@@ -12,7 +11,6 @@ import org.jboss.logging.Logger;
 import java.lang.invoke.MethodHandles;
 import java.util.*;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -72,7 +70,7 @@ public class RunConfig {
     private Boolean colorTerminal = false;
     private List<RunError> errors;
 
-    private List<Stage> skipStages;
+    private List<Stage> stages;
 
     private Set<String> tracePatterns;
 
@@ -84,6 +82,7 @@ public class RunConfig {
     protected RunConfig(
             String name,
             List<RunError> errors,
+            List<Stage> stages,
             Map<String,Script> scripts,
             State state,
             Counters<String> signalCounts,
@@ -93,12 +92,12 @@ public class RunConfig {
             String passphrase,
             Integer timeout,
             Set<String> tracePatterns,
-            List<Stage> skipStages,
             Globals globals,
             boolean streamLogging,
             String consoleFormatPattern){
         this.name = name;
         this.errors = errors;
+        this.stages = stages;
         this.scripts = scripts;
         this.signalCounts = signalCounts;
         this.state = state;
@@ -110,7 +109,6 @@ public class RunConfig {
             this.timeout = timeout;
         }
         this.tracePatterns = new HashSet<>(tracePatterns);
-        this.skipStages = skipStages;
         this.globals = globals;
         this.streamLogging = streamLogging;
         this.consoleFormatPattern = consoleFormatPattern;
@@ -118,8 +116,6 @@ public class RunConfig {
 
     public String getConsoleFormatPattern(){return consoleFormatPattern;}
     public boolean isStreamLogging(){return streamLogging;}
-    public boolean hasSkipStages(){return !skipStages.isEmpty();}
-    public List<Stage> getSkipStages(){return skipStages;}
 
     public Counters<String> getSignalCounts(){return signalCounts;}
     public Globals getGlobals(){return globals;}
@@ -141,6 +137,7 @@ public class RunConfig {
     }
 
 
+    public List<Stage> getStages(){return stages;}
 
 
     public String debug(){

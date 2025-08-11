@@ -264,7 +264,7 @@ public class RunTest extends SshTestBase {
                - biz
            """.replaceAll("TARGET_HOST",getHost().toString())
       ));
-      builder.addSkipStage(Stage.Setup);
+      builder.addSkipStage(Stage.SETUP.name());
       RunConfig config = builder.buildConfig(parser);
 
       assertFalse("runConfig errors:\n" + config.getErrorStrings().stream().collect(Collectors.joining("\n")), config.hasErrors());
@@ -305,7 +305,7 @@ public class RunTest extends SshTestBase {
                - biz
            """.replaceAll("TARGET_HOST",getHost().toString())
       ));
-      builder.addSkipStage(Stage.Run);
+      builder.addSkipStage(Stage.RUN.name());
       RunConfig config = builder.buildConfig(parser);
 
       assertFalse("runConfig errors:\n" + config.getErrorStrings().stream().collect(Collectors.joining("\n")), config.hasErrors());
@@ -345,7 +345,7 @@ public class RunTest extends SshTestBase {
                   - biz
               """.replaceAll("TARGET_HOST",getHost().toString())
       ));
-      builder.addSkipStage(Stage.Cleanup);
+      builder.addSkipStage(Stage.CLEANUP.name());
       RunConfig config = builder.buildConfig(parser);
 
       assertFalse("runConfig errors:\n" + config.getErrorStrings().stream().collect(Collectors.joining("\n")), config.hasErrors());

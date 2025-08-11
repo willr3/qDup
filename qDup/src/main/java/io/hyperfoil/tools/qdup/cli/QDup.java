@@ -89,10 +89,8 @@ public class QDup implements Callable<Integer>, QuarkusApplication {
     @CommandLine.Option(names = {"-ix","--ignore-exit-code"}, description = "disable abort on non-zero exit code", defaultValue = "false")
     boolean ignoreExitCode;
 
-    static enum SkipableStage { setup, run, cleanup}
-
     @CommandLine.Option(names = {"--skip-stages"}, description = "skip specified stages")
-    Set<Stage> skipStages;
+    Set<String> skipStages;
     @CommandLine.Option(names = {"--"+Globals.STREAM_LOGGING}, description = "log sh output as each line is available", defaultValue = "false")
     boolean streamLogging;
 
@@ -346,7 +344,7 @@ public class QDup implements Callable<Integer>, QuarkusApplication {
                 if (mainThread.isPresent()) {
                     run.joinLatch(120,TimeUnit.SECONDS);
                 }
-            } else if (Stage.Cleanup.equals(run.getStage()) && dispatcher.isRunning() && !dispatcher.isStopping()){
+            } else if (dispatcher.isRunning() && !dispatcher.isStopping() && !run.isAborted()){
                 run.abort(true);
             }
         });

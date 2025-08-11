@@ -54,9 +54,9 @@ public class Role {
     public String getName(){
         return name;
     }
-    public List<ScriptCmd> getSetup(){return getStage(Stage.Setup);}
-    public List<ScriptCmd> getRun(){return getStage(Stage.Run);}
-    public List<ScriptCmd> getCleanup(){return getStage(Stage.Cleanup);}
+    public List<ScriptCmd> getSetup(){return getStage(Stage.SETUP);}
+    public List<ScriptCmd> getRun(){return getStage(Stage.RUN);}
+    public List<ScriptCmd> getCleanup(){return getStage(Stage.CLEANUP);}
     public boolean hasScripts(){
         return !scripts.isEmpty();
     }
@@ -82,13 +82,13 @@ public class Role {
     }
 
     public void addSetup(ScriptCmd script){
-        this.scripts.put(Stage.Setup,script);
+        this.scripts.put(Stage.SETUP,script);
     }
     public void addRun(ScriptCmd script){
-        this.scripts.put(Stage.Run,script);
+        this.scripts.put(Stage.RUN,script);
     }
     public void addCleanup(ScriptCmd script){
-        this.scripts.put(Stage.Cleanup,script);
+        this.scripts.put(Stage.CLEANUP,script);
     }
     public void addHost(Host host){
         this.hosts.add(host);

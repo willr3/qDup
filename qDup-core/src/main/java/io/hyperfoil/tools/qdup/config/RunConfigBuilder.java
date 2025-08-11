@@ -30,7 +30,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class RunConfigBuilder {
-   private static final List<Stage> SKIPABLE_STAGES = Arrays.asList(Stage.Setup,Stage.Run,Stage.Cleanup);
    private final static Logger logger = Logger.getLogger(MethodHandles.lookup().lookupClass());
    private static final Json EMPTY_ARRAY = new Json();
 
@@ -79,10 +78,12 @@ public class RunConfigBuilder {
    private Set<String> traceTargets;
    private Globals globals;
    private List<String> errors;
-   private List<Stage> skipStages;
+   private List<Stage> stages;
+   private Set<String> skipStages;
    private boolean streamLogging = false;
    private String consoleFormatPattern;
    private boolean isValid = false;
+
 
 
    public RunConfigBuilder() {
@@ -101,7 +102,8 @@ public class RunConfigBuilder {
       hostDefinitions = new HashMap<>();
       traceTargets = new HashSet<>();
       errors = new LinkedList<>();
-      skipStages = new ArrayList<>();
+      stages = new ArrayList<>(List.of(Stage.SETUP,Stage.RUN,Stage.CLEANUP));
+      skipStages = new HashSet<>();
       globals = new Globals();
       consoleFormatPattern = DEFAULT_RUN_CONSOLE_FORMAT;
    }
@@ -127,10 +129,8 @@ public class RunConfigBuilder {
 //      errors.addAll(error);
 //   }
 
-   public void addSkipStage(Stage stage){
-      if(SKIPABLE_STAGES.contains(stage)) {
-         skipStages.add(stage);
-      }
+   public void addSkipStage(String stage) {
+      skipStages.add(stage);
    }
    public void setStreamLogging(Boolean streamLogging){
       this.streamLogging = streamLogging;
@@ -423,6 +423,11 @@ public class RunConfigBuilder {
       return script;
    }
 
+   public List<Stage> getStages(){return stages;}
+   public int getStageIndex(Stage stage){
+      return stages.indexOf(stage);
+   }
+
    public RunConfig buildConfig(){
       return buildConfig(Parser.getInstance());
    }
@@ -637,12 +642,13 @@ public class RunConfigBuilder {
 
       if(!errors.isEmpty()){
          errors.forEach(error->{
-            summary.addError("", Stage.Pending,"","",error);
+            summary.addError("", null,"","",error);
          });
       }
       RunConfig rtrn = new RunConfig(
          getName(),
          summary.getErrors(),
+         stages.stream().filter(s->!skipStages.contains(s.name())).toList(),
          scripts,
          state,
          signalCounts.getCounts(),
@@ -652,7 +658,6 @@ public class RunConfigBuilder {
          getPassphrase(),
          timeout,
          getTracePatterns(),
-         skipStages,
          globals,
          streamLogging,
          consoleFormatPattern

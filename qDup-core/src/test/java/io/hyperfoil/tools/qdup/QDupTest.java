@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.Permission;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.Assert.*;
 
@@ -193,17 +194,17 @@ public class QDupTest extends SshTestBase{
         QDup qdup = new QDup("--skip-stages","setup,cleanup","-T","fake.yaml");
         assertTrue("expect targetStages",qdup.hasSkipStages());
         assertEquals("expect 2 targetStages: "+qdup.getSkipStages(),2,qdup.getSkipStages().size());
-        List<Stage> targetStages = qdup.getSkipStages();
-        assertTrue("should contain setup "+targetStages,targetStages.contains(Stage.Setup));
-        assertTrue("should contain cleanup "+targetStages,targetStages.contains(Stage.Cleanup));
+        Set<String> targetStages = qdup.getSkipStages();
+        assertTrue("should contain setup "+targetStages,targetStages.contains("setup"));
+        assertTrue("should contain cleanup "+targetStages,targetStages.contains("cleanup"));
     }
     @Test
     public void skip_stages_valid_mixed_case(){
         QDup qdup = new QDup("--skip-stages","Setup,Cleanup","-T","fake.yaml");
         assertTrue("expect targetStages",qdup.hasSkipStages());
         assertEquals("expect 2 targetStages: "+qdup.getSkipStages(),2,qdup.getSkipStages().size());
-        List<Stage> targetStages = qdup.getSkipStages();
-        assertTrue("should contain setup "+targetStages,targetStages.contains(Stage.Setup));
-        assertTrue("should contain cleanup "+targetStages,targetStages.contains(Stage.Cleanup));
+        Set<String> targetStages = qdup.getSkipStages();
+        assertTrue("should contain setup "+targetStages,targetStages.contains("setup"));
+        assertTrue("should contain cleanup "+targetStages,targetStages.contains("cleanup"));
     }
 }

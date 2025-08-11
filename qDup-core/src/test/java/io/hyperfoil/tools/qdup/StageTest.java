@@ -15,10 +15,6 @@ import static org.junit.Assert.*;
 
 public class StageTest extends SshTestBase{
 
-    @Test
-    public void isBefore_sameStage(){
-        assertFalse("Cleanup should not be before Cleanup",Stage.Cleanup.isBefore(Stage.Cleanup));
-    }
 
     @Test
     public void variableSignalName_boundInState(){

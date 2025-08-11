@@ -173,6 +173,7 @@ public class UndefinedStateVariables implements RunRule {
             RSSCRef rssc = new RSSCRef(
                     location.getRoleName(),
                     location.getStage(),
+                    config.getStageIndex(location.getStage()),
                     location.getScriptName(),
                     command
             );
@@ -190,6 +191,7 @@ public class UndefinedStateVariables implements RunRule {
             RSSCRef rssc = new RSSCRef(
                     location.getRoleName(),
                     location.getStage(),
+                    config.getStageIndex(location.getStage()),
                     location.getScriptName(),
                     command
             );
@@ -203,6 +205,7 @@ public class UndefinedStateVariables implements RunRule {
             RSSCRef rssc = new RSSCRef(
                     location.getRoleName(),
                     location.getStage(),
+                    config.getStageIndex(location.getStage()),
                     location.getScriptName(),
                     command
             );
@@ -221,6 +224,7 @@ public class UndefinedStateVariables implements RunRule {
             RSSCRef rssc = new RSSCRef(
                     location.getRoleName(),
                     location.getStage(),
+                    config.getStageIndex(location.getStage()),
                     location.getScriptName(),
                     command
             );
@@ -246,6 +250,7 @@ public class UndefinedStateVariables implements RunRule {
                             new RSSCRef(
                                 location.getRoleName(),
                                 location.getStage(),
+                                config.getStageIndex(location.getStage()),
                                 location.getScriptName(),
                                 command
                             )

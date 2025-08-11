@@ -1,5 +1,6 @@
 package io.hyperfoil.tools.qdup.config;
 
+import io.hyperfoil.tools.qdup.Host;
 import io.hyperfoil.tools.qdup.Stage;
 import io.hyperfoil.tools.qdup.cmd.Cmd;
 import io.hyperfoil.tools.qdup.cmd.Script;
@@ -35,21 +36,20 @@ public class RunSummary implements RunRule{
         rules.remove(name);
     }
     public void scan(Collection<Role> roles,RunConfigBuilder configBuilder){
-        roles.forEach(role -> {
-            role.getDeclaredHosts().forEach(host -> {
-                role.getSetup().forEach(scriptCmd -> this.private_walk(new CmdLocation(role.getName(),Stage.Setup,scriptCmd.getName(),host.toString(), CmdLocation.Position.Child),scriptCmd,configBuilder,new Cmd.Ref(scriptCmd)));
-            });
-        });
-        roles.forEach(role -> {
-            role.getDeclaredHosts().forEach(host -> {
-                role.getRun().forEach(scriptCmd -> this.private_walk(new CmdLocation(role.getName(),Stage.Run,scriptCmd.getName(),host.toString(), CmdLocation.Position.Child),scriptCmd,configBuilder,new Cmd.Ref(scriptCmd)));
-            });
-        });
-        roles.forEach(role -> {
-            role.getDeclaredHosts().forEach(host -> {
-                role.getCleanup().forEach(scriptCmd -> this.private_walk(new CmdLocation(role.getName(),Stage.Cleanup,scriptCmd.getName(),host.toString(), CmdLocation.Position.Child),scriptCmd,configBuilder,new Cmd.Ref(scriptCmd)));
-            });
-        });
+        for(Stage stage: configBuilder.getStages()){
+            for(Role role : roles){
+                for(Host host : role.getDeclaredHosts()){
+                    role.getStage(stage).forEach(scriptCmd->{
+                        this.private_walk(
+                                new CmdLocation(role.getName(),stage,scriptCmd.getName(),host.toString(), CmdLocation.Position.Child),
+                                scriptCmd,
+                                configBuilder,
+                                new Cmd.Ref(scriptCmd)
+                        );
+                    });
+                }
+            }
+        }
         close(configBuilder,this);
     }
 

@@ -15,7 +15,7 @@ public class CmdLocation {
     public static CmdLocation createTmp(){
         return new CmdLocation(
                 "",
-                Stage.PreSetup,
+                null, //no stage yet?
                 "",
                 "",
                 Position.Watcher

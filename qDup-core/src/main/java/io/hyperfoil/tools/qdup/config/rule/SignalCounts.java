@@ -38,7 +38,7 @@ public class SignalCounts implements RunRule {
             if(Cmd.hasStateReference(populated,command)){
                 //TODO do we warn about wait-for something that cannot resolve at compile time
             }
-            waits.put(populated,new RSSCRef(location.getRoleName(),location.getStage(),location.getScriptName(),command));
+            waits.put(populated,new RSSCRef(location.getRoleName(),location.getStage(),config.getStageIndex(location.getStage()),location.getScriptName(),command));
         }else if (command instanceof Signal){
             String populated = Cmd.populateStateVariables(((Signal) command).getName(), command, config.getState(), null, null, ref);
             if(Cmd.hasStateReference(populated,command)){
@@ -63,7 +63,7 @@ public class SignalCounts implements RunRule {
                 }
 
                 if(!found) {
-                    RSSCRef signalRef = new RSSCRef(location.getRoleName(),location.getStage(),location.getScriptName(), command);
+                    RSSCRef signalRef = new RSSCRef(location.getRoleName(),location.getStage(),config.getStageIndex(location.getStage()),location.getScriptName(), command);
                     waits.get(populated).stream().filter(rssc -> {
                         return signalRef.isSameScript(rssc) ||
                                 rssc.isBeforeOrSequentiallyWith(signalRef);

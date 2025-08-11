@@ -32,7 +32,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.logging.Level;
 import java.util.regex.Pattern;
 
@@ -45,18 +44,9 @@ import static io.hyperfoil.tools.qdup.cmd.PatternValuesMap.QDUP_GLOBAL_ABORTED;
  */
 public class Run implements Runnable, DispatchObserver {
 
-    public static final String RUN_LOGGER_NAME = "qdup.run";
-
-
     private static final Logger logger = Logger.getLogger(MethodHandles.lookup().lookupClass());
 
-    private final static AtomicReferenceFieldUpdater<Run,Stage> stageUpdated = AtomicReferenceFieldUpdater.newUpdater(Run.class, Stage.class,"stage");
-    //private final static AtomicReferenceFieldUpdater<Run,Integer> stageIndexUpdate = AtomicReferenceFieldUpdater.newUpdater(Run.class, Integer.class,"stageIndex");
-
-    //TODO does a static logger name retain file appenders from previous Runs?
-
     static class JitterCheck implements Runnable{
-
         @Override
         public void run() {
             long period = 50;
@@ -67,7 +57,7 @@ public class Run implements Runnable, DispatchObserver {
                     Thread.sleep(period);
                 } catch (InterruptedException e) {
                     logger.debug("Interrupted, terminating jitter watchdog");
-                    boolean interrupted = Thread.interrupted();
+                    Thread.currentThread().interrupt();
                     return;
                 }
                 long currentTimestamp = System.nanoTime();
@@ -80,7 +70,6 @@ public class Run implements Runnable, DispatchObserver {
         }
     }
 
-    private volatile Stage stage;
     private volatile Integer stageIndex = -1;
 
     private final List<RunObserver> runObservers;
@@ -108,9 +97,6 @@ public class Run implements Runnable, DispatchObserver {
 
     private List<Stage> stages;
 
-
-    private List<Stage> skipStages;
-
     public Run(String outputPath,RunConfig config,Dispatcher dispatcher){
         if(config==null || dispatcher==null){
             throw new NullPointerException("Run config and dispatcher cannot be null");
@@ -123,18 +109,13 @@ public class Run implements Runnable, DispatchObserver {
         this.outputPath = outputPath;
         this.dispatcher = dispatcher;
         this.dispatcher.addDispatchObserver(this);
-        this.stage = Stage.Pending;
         this.aborted = new AtomicBoolean(false);
 
         this.timestamps = new LinkedHashMap<>();
         this.profiles = new Profiles();
         this.coordinator = new Coordinator(config.getGlobals());
         this.local = new Local(config);
-
-        this.skipStages = config.getSkipStages();
-        this.stages = new ArrayList<>(List.of(Stage.Setup,Stage.Run,Stage.Cleanup,Stage.Done));
-
-        this.stages.removeAll(this.skipStages);
+        this.stages = config.getStages();
 
         coordinator.addObserver((signal_name)->{
             runLogger.infof(
@@ -147,7 +128,6 @@ public class Run implements Runnable, DispatchObserver {
         this.pendingDownloads = new HashedSets<>();
         this.pendingDeletes = new HashedSets<>();
     }
-
 
     private boolean removeLogger(){
         if(fileHandler!=null){
@@ -236,12 +216,12 @@ public class Run implements Runnable, DispatchObserver {
     @Override
     public void preStart(){
         ensureLogger();
-        timestamps.put(stage.getName()+"Start",System.currentTimeMillis());
+        timestamps.put(getStage().getName()+".start",System.currentTimeMillis());
     }
     @Override
     public void postStop(){
         //ensureLogger();//this was overriding the previous file :(
-        timestamps.put(stage.getName()+"Stop",System.currentTimeMillis());
+        timestamps.put(getStage().getName()+".stop",System.currentTimeMillis());
         boolean started = nextStage();
         if(!started){
 
@@ -250,9 +230,9 @@ public class Run implements Runnable, DispatchObserver {
     }
     private boolean nextStage(){
         boolean startDispatcher = false;
-        if(hasRunObserver()){
+        if(hasRunObserver() && getStage()!=null){
             for(RunObserver observer : runObservers){
-                observer.postStage(stage);
+                observer.postStage(getStage());
             }
         }
         if(stageIndex >= 0 && stageIndex < stages.size()) {
@@ -262,89 +242,17 @@ public class Run implements Runnable, DispatchObserver {
             }
         }
         stageIndex++;
-        if(stageIndex >= stages.size()){
+            if(stageIndex >= stages.size()){
             runPendingDownloads(); //added incase fo abort
             postRun();
             return false;
         }
         Stage targetStage = stages.get(stageIndex);
         startDispatcher = queueStage(targetStage);
-
-/*        switch (stage){
-            case Pending:
-                //removed because no longer want to use cmds to create tmp_dir
-//                if(stageUpdated.compareAndSet(this,Stage.Pending, Stage.PreSetup)){
-//                    startDispatcher = queuePreSetupScripts();
-//                }
-                if(stageUpdated.compareAndSet(this,Stage.Pending, Stage.Setup)){
-                    if(skipStages.contains(stage)){
-                        return nextStage();
-                    } else {
-                        startDispatcher = queueSetupScripts();
-                    }
-                }
-                break;
-            case PreSetup:
-                if(stageUpdated.compareAndSet(this,Stage.PreSetup, Stage.Setup)){
-                    if(skipStages.contains(stage)){
-                        return nextStage();
-                    } else {
-                        startDispatcher = queueSetupScripts();
-                    }
-                }
-                break;
-            case Setup:
-                //if we are able to set the stage to Run
-                if(stageUpdated.compareAndSet(this,Stage.Setup,Stage.Run)){
-                    if(skipStages.contains(stage)){
-                        return nextStage();
-                    } else {
-                        startDispatcher = queueRunScripts();
-                    }
-                }
-                break;
-            case Run:
-                if(stageUpdated.compareAndSet(this,Stage.Run,Stage.PreCleanup)){
-                    runPendingDownloads();
-                    return nextStage();
-                }
-                break;
-            case PreCleanup:
-                if(stageUpdated.compareAndSet(this,Stage.PreCleanup,Stage.Cleanup)){
-                    if(skipStages.contains(stage)){
-                        return nextStage();
-                    } else {
-                        startDispatcher = queueCleanupScripts();
-                    }
-                }
-                break;
-            case Cleanup:
-                if(stageUpdated.compareAndSet(this,Stage.Cleanup,Stage.PostCleanup)) {
-                    runPendingDownloads();//download anything queued during cleanup
-                    runPendingDeletes();
-                    return nextStage();
-                }
-                break;
-            case PostCleanup:
-                if(stageUpdated.compareAndSet(this,Stage.PostCleanup,Stage.Done)) {
-                    if(skipStages.contains(stage)){
-                        return nextStage();
-                    } else {
-                        postRun();//release any latches blocking a call to run()
-                    }
-                }
-                break;
-            default:
-                if(stageUpdated.compareAndSet(this,Stage.PostCleanup,Stage.Done)){
-                    //happens for abort
-                    postRun();
-                    break;
-                }
-        }*/
         if(startDispatcher){
-            if(hasRunObserver()){
+            if(hasRunObserver() && getStage()!=null){
                 for(RunObserver observer: runObservers){
-                    observer.preStage(stage);
+                    observer.preStage(getStage());
                 }
             }
             dispatcher.start();
@@ -352,7 +260,20 @@ public class Run implements Runnable, DispatchObserver {
         return startDispatcher;
     }
 
-    public Stage getStage(){return stage;}
+    public boolean isPreCleanup(){
+        return stageIndex <= lastNonSequentialStageIndex();
+    }
+    public Stage getStage(){
+        if(stageIndex < 0 && !stages.isEmpty()){
+            return stages.get(0);
+        }else if (stageIndex >= 0 && stageIndex < stages.size()){
+            return stages.get(stageIndex);
+        }else if (!stages.isEmpty()){
+            return stages.get(stages.size()-1);
+        }else{
+            return null;
+        }
+    }
     public Local getLocal(){return local;}
     public RunConfig getConfig(){return config;}
     public boolean isAborted(){return aborted.get();}
@@ -473,6 +394,16 @@ public class Run implements Runnable, DispatchObserver {
         }
     }
 
+    private int lastNonSequentialStageIndex(){
+        int rtrn = 0;
+        for(int i=0; i<stages.size(); i++){
+            if(!stages.get(i).isSequential()){
+                rtrn = i;
+            }
+        }
+        return rtrn;
+    }
+
     /**
      *
      * @param skipCleanUp
@@ -482,24 +413,14 @@ public class Run implements Runnable, DispatchObserver {
         if(aborted.compareAndSet(false,true)){
             getConfig().getState().set(QDUP_GLOBAL+"."+QDUP_GLOBAL_ABORTED,true);//add ABORTED state for any cleanup scripts
             coordinator.clearWaiters();
-            if (!skipCleanUp && stage.isBefore(Stage.Cleanup)) {
-                stageUpdated.set(this, Stage.Run);//set the stage as run so dispatcher.stop call to DispatchObserver.postStop will set it to Cleanup
-                if(stages.contains(Stage.Cleanup) && stageIndex < stages.indexOf(Stage.Cleanup)-1){
-                    stageIndex = stages.indexOf(Stage.Cleanup)-1;
-                }else{
-                    stageIndex = stages.size();
-                }
+            if (!skipCleanUp && stageIndex <= lastNonSequentialStageIndex()) {
+                stageIndex = lastNonSequentialStageIndex();
             } else {
                 logger.warn("Skipping cleanup - Abort has been defined to not run any cleanup scripts");
-                stageUpdated.set(this, Stage.PostCleanup);//set the stage as PostCleanup so dispatcher.stop call to DispatchObserver.postStop will set it to Done
                 stageIndex = stages.size();
 
             }
-
             dispatcher.stop(false);//interrupts working threads and stops dispatching next commands
-            //runPendingDownloads();//added here in addition to queueCleanupScripts to download when run aborts
-            //abort doesn't end the run, cleanup ends the run
-            //runLatch.countDown();
             return true;//we aborted
         }else{
             logger.info("abort called when already aborted");
@@ -523,7 +444,8 @@ public class Run implements Runnable, DispatchObserver {
     @Override
     public void run() {
         ensureLogger();
-        if(Stage.Pending.equals(stage)){
+        //if we have not yet started the run
+        if(stageIndex == -1){
 
             //TODO enable jitter check? what amount of jitter matters for qDup?
 //            Thread jitterThread = new Thread(new JitterCheck(),"jitter-check");
@@ -764,7 +686,7 @@ public class Run implements Runnable, DispatchObserver {
         return ok;
     }
     private boolean queueStage(Stage targetStage){
-        logger.debugf("%s.%s",this,stage.getName());
+        logger.debugf("%s.%s",this,getStage().getName());
         List<Callable<Boolean>> connectSessions = new LinkedList<>();
         Role allRole = config.getRole(RunConfigBuilder.ALL_ROLE);
         config.getRoleNames().forEach(roleName->{
@@ -773,13 +695,13 @@ public class Run implements Runnable, DispatchObserver {
             if(!role.getStage(targetStage).isEmpty()){
                 if(targetStage.isSequential()){
                     final Script sequential = new Script(targetStage.name());
-                    if(targetStage.setEnv()){
+                    if(!targetStage.ignoreEnv()){
                         sequential.then(new RoleEnv(role,true));
                     }
                     role.getStage(targetStage).forEach(cmd->{
                         sequential.then(cmd);
                     });
-                    if(targetStage.setEnv()){
+                    if(!targetStage.ignoreEnv()){
                         sequential.then(new RoleEnv(role,false));
                     }
                     toCall.add(sequential);
@@ -864,274 +786,10 @@ public class Run implements Runnable, DispatchObserver {
         }
         return ok;
     }
-    private boolean queueSetupScripts(){
-        logger.debugf("%s.setup",this);
-        //Observer to set the Env.Diffs
-        List<Callable<Boolean>> connectSessions = new LinkedList<>();
-        //TODO don't run an ALL-setup but rather put it in the start of each connection?
-        config.getRoleNames().stream().forEach(roleName->{
-            final Role role = config.getRole(roleName);
-            if(!role.getSetup().isEmpty()){
-               //final Script setup = new Script(roleName+"-setup");
-                final Script setup = new Script("setup");
-               setup.then(new RoleEnv(role,true));
-               role.getSetup().forEach(cmd->{
-                   setup.then(cmd);
-               });
-               setup.then(new RoleEnv(role,false));
-
-               role.getHosts(config).forEach(host->{
-                   connectSessions.add(()->{
-                       String name = roleName+"-setup@"+host.getShortHostName()+"."+Cmd.populateStateVariables(config.getGlobals().getSettings().getString(RunConfig.TRACE_NAME),null,getConfig().getState(),getCoordinator(),Json.fromMap(getTimestamps()));
-                       AbstractShell shell =  AbstractShell.getShell(
-                               name,
-                               host,
-                               "",
-                               getDispatcher().getCallback(),
-                               getConfig().getState().getSecretFilter(),
-                               isTrace(name)
-                       );
-                       shell.setName(name);
-                       if ( shell.isReady() ) {
-                           //TODO configure session delay
-                           //session.setDelay(SuffixStream.NO_DELAY);
-                           Cmd setupCopy = setup.deepCopy();
-                           State hostState = config.getState().getChild(host.getHostName(), State.HOST_PREFIX);
-                           State scriptState = hostState.getChild(setup.getName()).getChild("id=" + setupCopy.getUid());
-
-                           profiles.getProperties(name).set("host",host.getShortHostName());
-                           profiles.getProperties(name).set("role",role.getName());
-                           profiles.getProperties(name).set("script",setup.getName());
-                           profiles.getProperties(name).set("scriptId",setupCopy.getUid());
-                           ScriptContext scriptContext = new ScriptContext(
-                                   shell,
-                                   scriptState,
-                                   this,
-                                   profiles.get(name),
-                                   setupCopy,
-                                   (Boolean)config.getGlobals().getSetting("check-exit-code",false)
-                           );
-                           scriptContext.setRoleName(role.getName());
-
-                           getDispatcher().addScriptContext(scriptContext);
-                           return shell.isOpen();
-                       } else {
-                           logger.error("setup failed to connect "+host.getSafeString());
-                           shell.close();
-                           return false;
-                       }
-                   });
-               });
-            }
-
-        });
-        boolean ok = true;
-        if(!connectSessions.isEmpty()) {
-            ok = connectAll(connectSessions, 60);
-            if (!ok) {
-                getRunLogger().error("failed to connect all ssh sessions for setup");
-                abort(true);
-            }
-
-        }else{
-
-        }
-        return ok;
-    }
-    private boolean queueRunScripts(){
-        logger.debugf("%s.queueRunScripts",this);
-
-        List<Callable<Boolean>> connectSessions = new LinkedList<>();
-
-        Role allRole = config.getRole(RunConfigBuilder.ALL_ROLE);
-        for(String roleName : config.getRoleNames()){
-            Role role = config.getRole(roleName);
-            if (!role.getRun().isEmpty()) {
-                for (ScriptCmd script : role.getRun()) {
-                    for (Host host : role.getHosts(config)) {
-                        ScriptCmd scriptCopy = (ScriptCmd) script.deepCopy();
-                        State hostState = config.getState().getChild(host.getHostName(), State.HOST_PREFIX);
-                        State scriptState = hostState.getChild(scriptCopy.getName()).getChild("id=" + scriptCopy.getUid());
-                        String profileName = scriptCopy.getName() + "-" + scriptCopy.getUid() + "@" + host;
-                        SystemTimer timer = profiles.get(profileName);
-                        profiles.getProperties(profileName).set("host",host.getShortHostName());
-                        profiles.getProperties(profileName).set("role",role.getName());
-                        profiles.getProperties(profileName).set("script",scriptCopy.getName());
-                        profiles.getProperties(profileName).set("scriptId",scriptCopy.getUid());
-                        Env env = role.hasEnvironment(host) ? role.getEnv(host) : new Env();
-                        if(!role.getName().equals(RunConfigBuilder.ALL_ROLE) && allRole!=null && allRole.hasEnvironment(host)){
-                            env.merge(allRole.getEnv(host));
-                        }
-                        String setupCommand = env.getDiff().getCommand();
-                        connectSessions.add(() -> {
-
-                            String name = scriptCopy.getName()+":"+scriptCopy.getUid()+"@"+host.getShortHostName()+"."+Cmd.populateStateVariables(config.getGlobals().getSettings().getString(RunConfig.TRACE_NAME),null,getConfig().getState(),getCoordinator(),Json.fromMap(getTimestamps()));
-                            timer.start("connect:" + host.toString());
-                            AbstractShell shell = AbstractShell.getShell(
-                                    name,
-                                    host,
-                                    setupCommand,
-                                    getDispatcher().getCallback(),
-                                    getConfig().getState().getSecretFilter(),
-                                    isTrace(name)
-                            );
-                            shell.setName(name);
-                            if (shell.isReady()) {
-                                //shell.shSync(setupCommand); //moved into getShell
-                                //session.setDelay(SuffixStream.NO_DELAY);
-                                timer.start("context:" + host.toString());
-                                ScriptContext scriptContext = new ScriptContext(
-                                        shell,
-                                        scriptState,
-                                        this,
-                                        timer,
-                                        scriptCopy,
-                                        (Boolean)config.getGlobals().getSetting("check-exit-code",false)
-                                );
-                                scriptContext.setRoleName(role.getName());
-                                getDispatcher().addScriptContext(scriptContext);
-                                boolean rtrn = shell.isOpen();
-                                timer.start("waiting for start");
-                                return rtrn;
-                            } else {
-                                logger.error("run failed to connect "+host.getSafeString()
-                                        +(host.hasContainerId() ? " "+host.getContainerId() : "")
-                                        +(host.hasPassword() ?
-                                            ", verify ssh works with the provided username and password" :
-                                            ", verify password-less ssh works with the selected keys"
-                                        +"\n"+shell.peekOutput())
-                                );
-                                shell.close();
-                                return false;
-                            }
-                        });
-                    }
-                }
-            }
-        }
-        boolean ok = true;
-
-        if(!connectSessions.isEmpty()) {
-            ok = false; // it better be set by dispatcher then
-            try {
-                List<Boolean> oks = getDispatcher().invokeAll(connectSessions).stream().map((f)->{
-                    boolean rtrn = false;
-                    try{
-                        rtrn = f.get();
-                    } catch (InterruptedException e){
-                        e.printStackTrace();
-                    } catch (Exception e ){
-                        e.printStackTrace();
-                    }
-                    return rtrn;
-                }).toList();
-                ok = oks.stream().reduce(Boolean::logicalAnd).orElse(false);
-                        //;.collect(Collectors.reducing(Boolean::logicalAnd)).get();
-            } catch (InterruptedException e){
-
-            }
-            if(!ok){
-                getRunLogger().error("failed to connect all ssh sessions for run");
-                abort(true);
-            }
-        }else{
-
-        }
-        return ok;
-    }
 
     private boolean isTrace(String value){
         //return true; //temporarily debug everything
         return config.getTracePatterns().stream().anyMatch(pattern -> value.contains(pattern) || Pattern.matches(pattern,value));
-    }
-
-    private boolean queueCleanupScripts(){
-        //Observer to set the Env.Diffs
-        List<Callable<Boolean>> connectSessions = new LinkedList<>();
-
-        config.getRoleNames().forEach(roleName->{
-            Role role = config.getRole(roleName);
-            if(!role.getCleanup().isEmpty()){
-                //final Script cleanup = new Script(roleName+"-cleanup");
-                Script cleanup = new Script("cleanup");
-                role.getCleanup().forEach(cmd->{
-                    cleanup.then(cmd);
-                });
-                role.getHosts(config).forEach(host->{
-                    String setupCommand = role.hasEnvironment(host) ? role.getEnv(host).getDiff().getCommand() : "";
-                    connectSessions.add(()->{
-                        String name = roleName + "-cleanup@"+host.getShortHostName()+"."+Cmd.populateStateVariables(config.getGlobals().getSettings().getString(RunConfig.TRACE_NAME),null,getConfig().getState(),getCoordinator(),Json.fromMap(getTimestamps()));
-                        AbstractShell shell = AbstractShell.getShell(
-                                name,
-                                host,
-                                "",
-                                getDispatcher().getCallback(),
-                                getConfig().getState().getSecretFilter(),
-                                isTrace(name)
-                        );
-                        shell.setName(name);
-                        if ( shell.isReady() ) {
-                            Script cleanupCopy = (Script)cleanup.deepCopy();
-                            State hostState = config.getState().getChild(host.getHostName(), State.HOST_PREFIX);
-                            State scriptState = hostState.getChild(cleanupCopy.getName()).getChild("id=" + cleanupCopy.getUid());
-
-                            String profileName = roleName + "-cleanup@" + host.getShortHostName();
-                            profiles.getProperties(profileName).set("role",role.getName());
-                            profiles.getProperties(profileName).set("host",host.getShortHostName());
-                            profiles.getProperties(profileName).set("script",cleanupCopy.getName());
-                            profiles.getProperties(profileName).set("scriptId",cleanupCopy.getUid());
-                            //session.setDelay(SuffixStream.NO_DELAY);
-                            ScriptContext scriptContext = new ScriptContext(
-                                    shell,
-                                    scriptState,
-                                    this,
-                                    profiles.get(profileName),
-                                    cleanupCopy,
-                                    (Boolean)config.getGlobals().getSetting("check-exit-code",false)
-                            );
-                            scriptContext.setRoleName(role.getName());
-
-                            getDispatcher().addScriptContext(scriptContext);
-                            return shell.isOpen();
-                        }
-                        else {
-                            logger.error("cleanup failed to connect "+host.getSafeString());
-                            shell.close();
-                            return false;
-                        }
-                    });
-                });
-            }
-        });
-        boolean ok = true;
-        if(!connectSessions.isEmpty()){
-            ok = false; // it better be set by dispatcher then
-            try {
-                List<Boolean> oks = getDispatcher().invokeAll(connectSessions).stream().map((f)->{
-                    boolean rtrn = false;
-                    try{
-                        rtrn = f.get();
-                    } catch (InterruptedException e){
-                        e.printStackTrace();
-                    } catch (Exception e ){
-                        e.printStackTrace();
-                    }
-                    return rtrn;
-                }).toList();
-                ok = oks.stream().reduce(Boolean::logicalAnd).orElse(false);
-                //;.collect(Collectors.reducing(Boolean::logicalAnd)).get();
-            } catch (InterruptedException e){
-
-            }
-            if(!ok){
-                getRunLogger().error("failed to connect all ssh sessions for cleanup");
-                abort(true);
-            }
-
-        }else{
-
-        }
-        return ok;
     }
     private void postRun(){
         logger.debugf("%s.postRun",this);
