@@ -29,8 +29,6 @@ public class SyncContext implements Context, Runnable{
     private final ScriptContext scriptContext;
     private final Cmd scriptActiveCmd;
 
-    private String cwd="";
-    private String homeDir="";
 
     public SyncContext(AbstractShell session, State state, Run run, SystemTimer timer, Cmd currentCmd, ScriptContext scriptContext){
         this.session = session;
@@ -43,30 +41,8 @@ public class SyncContext implements Context, Runnable{
         this.scriptActiveCmd = scriptContext.getCurrentCmd();
     }
 
-    public void setCwd(String cwd){
-        this.cwd = cwd;
-    }
-
-    public String getCwd(){
-        if(scriptContext!=null){
-            return scriptContext.getCwd();
-        } else {
-            return cwd;
-        }
-    }
-
     @Override
     public Globals getGlobals(){return run.getConfig().getGlobals();}
-
-    @Override
-    public void setHomeDir(String dir) {
-        this.homeDir = dir;
-    }
-
-    @Override
-    public String getHomeDir() {
-        return homeDir;
-    }
 
     public Run getRun(){ return run;}
 
@@ -213,7 +189,7 @@ public class SyncContext implements Context, Runnable{
 
     @Override
     public SystemTimer getCommandTimer() {
-        return null;
+        return cmdTimer;
     }
 
     @Override

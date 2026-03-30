@@ -99,22 +99,7 @@ public class ScriptContext implements Context, Runnable{
     long updateTime = -1;
 
     private String roleName="";
-    private String cwd="";
-    private String homeDir="";
     private boolean isAborted=false;
-    @Override
-    public String getCwd(){return cwd;}
-    @Override
-    public void setCwd(String cwd){
-        this.cwd = cwd;
-    }
-
-    @Override
-    public void setHomeDir(String dir){
-        this.homeDir = dir;
-    }
-    @Override
-    public String getHomeDir(){return homeDir;}
 
     public boolean checkExitCode(){return checkExitCode;}
 

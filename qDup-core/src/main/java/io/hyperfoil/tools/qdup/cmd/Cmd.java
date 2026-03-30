@@ -13,6 +13,7 @@ import io.hyperfoil.tools.yaup.PopulatePatternException;
 import io.hyperfoil.tools.yaup.StringUtil;
 import io.hyperfoil.tools.yaup.json.Json;
 import io.hyperfoil.tools.yaup.json.JsonMap;
+import io.hyperfoil.tools.yaup.time.SystemTimer;
 import org.jboss.logging.Logger;
 
 import java.lang.invoke.MethodHandles;
@@ -623,6 +624,8 @@ public abstract class Cmd {
    private Cmd parent;
    private Cmd stateParent;
 
+   private List<Cmd> deferredCmd = new ArrayList<>();
+
    private String idleTimer = ""+DEFAULT_IDLE_TIMER;
    protected boolean silent = false;
    private boolean stateScan = true;
@@ -646,6 +649,13 @@ public abstract class Cmd {
       this.stateParent = null;
       this.uid = uidGenerator.incrementAndGet();
    }
+
+   public boolean hasDeferredCmd(){ return !deferredCmd.isEmpty();}
+   public void addDeferredCmd(Cmd command){
+       deferredCmd.add(command);
+   }
+   public List<Cmd> getDeferredCmd() {return deferredCmd;}
+
    /**
     * Set if this command should be scanned for state references.
     * @param stateScan
@@ -966,8 +976,34 @@ public abstract class Cmd {
       return rtrn;
    }
 
+    /**
+     * returns the observed command or null if this command is not in an observing context
+     * @return
+     */
+   public Cmd getObservedCmd(){
+       if(!isObserving()){
+           return null;
+       }
+       Cmd observer = getObservingRoot();
+       if(observer!=null && observer.hasStateParent()){
+           return observer.getStateParent();
+       }else{
+           return null;
+       }
+   }
+   public Cmd getObservingRoot(){
+       Cmd current = this;
+       while(current.hasParent()){
+           current = current.getParent();
+       }
+       return current;
+   }
    public boolean isObserving(){
-      return !hasParent() && hasStateParent();
+       Cmd current = this;
+       while(current.hasParent()){
+           current = current.getParent();
+       }
+      return !current.hasParent() && current.hasStateParent();
    }
    public boolean hasParent(){return parent!=null;}
    public Cmd getParent(){return parent;}
@@ -1127,11 +1163,34 @@ public abstract class Cmd {
    public void preRun(String input,Context context){
 
    }
+   protected void runDeferred(String output, Context context){
+
+       if(hasDeferredCmd()){
+           if(context instanceof ScriptContext scriptContext){
+               SystemTimer deferredTimer = scriptContext.getContextTimer().start("deferred");
+               for(Cmd deferred : getDeferredCmd()){
+                   SyncContext syncContext = new SyncContext(
+                           scriptContext.getShell(),
+                           scriptContext.getState(),
+                           scriptContext.getRun(),
+                           deferredTimer,//TODO create a deferred timer for this context?
+                           deferred,
+                           scriptContext
+                   );
+                   deferred.doRun(output,syncContext);
+               }
+               deferredTimer.stop();
+           }else{
+               //this shouldn't happen
+           }
+       }
+   }
    public void postRun(String output,Context context){
       String toLog = getLogOutput(output,context);
       if(toLog != null && !toLog.isBlank()){
          context.log(toLog);
       }
+      runDeferred(output, context);
    }
 
 

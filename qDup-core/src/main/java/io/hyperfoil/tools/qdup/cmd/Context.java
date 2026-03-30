@@ -41,12 +41,6 @@ public interface Context {
     void close();
     boolean isAborted();
 
-    void setCwd(String dir);
-    String getCwd();
-
-    void setHomeDir(String dir);
-    String getHomeDir();
-
     Globals getGlobals();
 
 }

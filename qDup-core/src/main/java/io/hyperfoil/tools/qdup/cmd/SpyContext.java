@@ -26,8 +26,6 @@ public class SpyContext implements Context {
     private Context context;
     private Globals globals;
 
-    private String cwd="";
-    private String homeDir="";
     public SpyContext(){
         this(null,new State(""),new Coordinator(new Globals()));
     }
@@ -230,25 +228,6 @@ public class SpyContext implements Context {
         return context!=null ? context.isAborted() : false;
     }
 
-    @Override
-    public void setCwd(String dir) {
-        this.cwd = cwd;
-    }
-
-    @Override
-    public String getCwd() {
-        return cwd;
-    }
-
-    @Override
-    public void setHomeDir(String dir) {
-        this.homeDir = dir;
-    }
-
-    @Override
-    public String getHomeDir() {
-        return homeDir;
-    }
     public boolean calledAbort(){return aborted;}
     public String getNext(){return next;}
     public boolean hasNext(){return next!=null;}
