@@ -451,9 +451,10 @@ public abstract class AbstractShell {
             sessionStreams.reset();
         }
         removeShObserver(SH_CALLBACK);
-        if (callback != null){
+        //if (callback != null){
+        //always add the callbak to clear current action
             addShObserver(SH_CALLBACK,this::callback);
-        }
+        //}
         boolean sendCommand = ensureConnected();
         if ( sendCommand ){
             if (!command.isEmpty()){

@@ -123,102 +123,49 @@ public class Sh extends Cmd {
 
     @Override
     public void postRun(String output,Context context){
-
         //turn off stream logging if enabled
         if(context.getCoordinator().getGlobals().getSetting(Globals.STREAM_LOGGING,false)){
             context.getShell().removeLineObserver("stream");
         }
 
+        runDeferred(output,context);
+
         //if the remote shell has exit codes and the response came from the base shell
-        //TODO the base shell is not the only one that supports exit code checking
         if(context.getShell()!=null &&
             context.getShell().isOpen() &&
             context.getShell().isPromptShell(getPreviousPrompt()) &&
-            context.getShell().getHost().isShell())
+            context.getShell().getHost().isShell() &&
+            shouldCheckExit(context))
         {
-
             long start = System.currentTimeMillis();
-
-            // Combined exit code capture + pwd + exit code restore in a single shSync
-            // to reduce per-command overhead from 3 round-trips to 1
-            String combined = context.getShell().shSync("export __qdup_ec=$?; echo \"${__qdup_ec}:::$(pwd)\"; (exit $__qdup_ec)");
-
-            long round_trip_time = System.currentTimeMillis() - start;
-
-            round_trip_time = round_trip_time - context.getShell().getDelay();
-
-
-            if(round_trip_time > DEFAULT_DELAY){
-                round_trip_time = DEFAULT_DELAY;
+            String response = context.getShell().shSync("export __qdup_ec=$?; echo \"${__qdup_ec}\"; (exit $__qdup_ec)");
+            long rount_trip_time = System.currentTimeMillis() - start;
+            rount_trip_time = rount_trip_time - context.getShell().getDelay();
+            if(rount_trip_time > DEFAULT_DELAY){
+                rount_trip_time = DEFAULT_DELAY;
             }
-
-            if(round_trip_time > 0){
-                context.getShell().setDelay((int) round_trip_time);
+            if(rount_trip_time > 0){
+                context.getShell().setDelay((int)rount_trip_time);
             }
-
-
-            String response = "";
-            String pwd = "";
-            boolean parsed = false;
-
-            // Parse combined response: "exitCode:::pwd" using indexOf to avoid
-            // issues if ::: appears in the pwd path
-            if (combined != null && !combined.isBlank()) {
-                String trimmed = combined.trim();
-                int delimIndex = trimmed.indexOf(":::");
-                if (delimIndex > 0) {
-                    String exitPart = trimmed.substring(0, delimIndex).trim();
-                    String pwdPart = trimmed.substring(delimIndex + 3).trim();
-                    if (exitPart.matches("-?\\d+")) {
-                        response = exitPart;
-                        pwd = pwdPart;
-                        parsed = true;
-                    }
-                }
-            }
-
-            // Fallback: if parsing failed due to noisy output from concurrent processes,
-            // retry by re-echoing the saved variable
             int retry = 0;
-            while (!parsed && retry < 5 && combined != null && !combined.isBlank() && context.getShell().isReady() && !context.isAborted()) {
-                combined = context.getShell().shSync("echo \"${__qdup_ec}:::$(pwd)\"");
-                if (combined != null) {
-                    String trimmed = combined.trim();
-                    int delimIndex = trimmed.indexOf(":::");
-                    if (delimIndex > 0) {
-                        String exitPart = trimmed.substring(0, delimIndex).trim();
-                        String pwdPart = trimmed.substring(delimIndex + 3).trim();
-                        if (exitPart.matches("-?\\d+")) {
-                            response = exitPart;
-                            pwd = pwdPart;
-                            parsed = true;
-                        }
-                    }
-                }
+            while ((response == null || !response.matches("-?\\d+")) && retry < 5 && context.getShell().isReady() && !context.isAborted()) {
+                response = context.getShell().shSync("echo \"${__qdup_ec}; (exit $__qdup_ec)\"");
                 retry++;
             }
-            // If we had to retry, $? was changed by the retries, so restore it
-            if (retry > 0 && parsed) {
-                context.getShell().shSync("(exit $__qdup_ec)");
-            }
-
-            if (!parsed) {
-                // All retries failed — log error and abort to avoid running in an unknown state
-                context.error("failed to parse exit code and pwd from postRun output [" + combined + "] for " + this);
-                context.abort(false);
-            } else if (context.getShell().isReady() && !context.isAborted()) {
-                context.setCwd(pwd);
-                if(response.matches("\\d+")){
-                    try {
-                        context.getCommandTimer().getData().set("exit_code", Integer.parseInt(response));
-                    }catch (NumberFormatException e){
-                        context.getCommandTimer().getData().set("exit_code", response);
-                    }
-                } else {
+            if(response.matches("-?\\d+")){
+                try {
+                    context.getCommandTimer().getData().set("exit_code", Integer.parseInt(response));
+                }catch (NumberFormatException e){
                     context.getCommandTimer().getData().set("exit_code", response);
                 }
-                context.getShell().flushAndResetBuffer();
+            } else {
+                context.getCommandTimer().getData().set("exit_code", response);
+                context.error("failed to parse exit code from postRun output [" + response + "] for " + this);
+                context.abort(false);
+                return;
             }
+            context.getShell().flushAndResetBuffer();
+
             //log the output if not using stream logging
             if(!context.getCoordinator().getGlobals().getSetting(Globals.STREAM_LOGGING,false)){
                 String toLog = getLogOutput(output,context);
@@ -231,7 +178,8 @@ public class Sh extends Cmd {
                 }
             }
             //abort on non-zero exit if needed
-            if(parsed && !"0".equals(response) && shouldCheckExit(context)){
+
+            if( !"0".equals(response) ){
                 boolean couldBeCtrlC = walk(CmdLocation.createTmp(), (cmd) -> {
                     return cmd instanceof CtrlC;
                 }).stream().anyMatch(Boolean::booleanValue);

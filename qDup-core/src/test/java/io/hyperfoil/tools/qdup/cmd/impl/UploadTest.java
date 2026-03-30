@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.stream.Collectors;
 
@@ -149,6 +150,92 @@ public class UploadTest extends SshTestBase {
         assertEquals("response should be the specified path","/tmp/renamed.txt",response);
         String readContent = Files.readString(Paths.get(response));
         assertEquals(wrote,readContent);
+    }
+
+    @Test
+    public void upload_resolve_path() throws IOException {
+        String wrote = "bizbuz";
+        File source = Files.createTempFile("qdup.",".upload.txt").toFile();
+        Files.write(source.toPath(),wrote.getBytes());
+
+        Parser parser = Parser.getInstance();
+        parser.setAbortOnExitCode(true);
+        RunConfigBuilder builder = getBuilder();
+
+        builder.loadYaml(parser.loadFile("pwd",
+                """
+                scripts:
+                  foo:
+                   - sh: export FOLDER=foo
+                   - sh: cd /tmp
+                   - upload: SRC ./foo/
+                   - upload: SRC ~/bar
+                   - upload: SRC ./${FOLDER}/$FOLDER/
+                hosts:
+                  local: TARGET_HOST
+                roles:
+                  doit:
+                    hosts: [local]
+                    run-scripts: [foo]
+                """.replaceAll("TARGET_HOST",getHost().toString())
+                        .replaceAll("SRC",source.getPath())
+        ));
+        RunConfig config = builder.buildConfig(parser);
+        assertFalse("runConfig errors:\n" + config.getErrorStrings().stream().collect(Collectors.joining("\n")), config.hasErrors());
+        Dispatcher dispatcher = new Dispatcher();
+        Run doit = new Run(tmpDir.toString(), config, dispatcher);
+        doit.ensureConsoleLogging();
+        doit.run();
+
+        List.of("~/bar","/tmp/foo/"+source.getName(),"/tmp/foo/foo/"+source.getName()).forEach(path->{
+            assertTrue(path+" should exist",exists(path));
+            String read = readFile(path);
+            assertEquals(wrote,read);
+        });
+    }
+    @Test
+    public void upload_defer_resolve_path() throws IOException {
+        String wrote = "bizbuz";
+        File source = Files.createTempFile("qdup.",".upload.txt").toFile();
+        Files.write(source.toPath(),wrote.getBytes());
+
+        Parser parser = Parser.getInstance();
+        parser.setAbortOnExitCode(true);
+        RunConfigBuilder builder = getBuilder();
+
+        builder.loadYaml(parser.loadFile("pwd",
+                """
+                scripts:
+                  foo:
+                   - sh: export FOLDER=foo
+                   - sh: cd /tmp
+                   - sh: sleep 4s
+                     timer:
+                       1s:
+                       - upload: SRC ./foo/
+                       - upload: SRC ~/bar
+                       - upload: SRC ./${FOLDER}/$FOLDER/
+                hosts:
+                  local: TARGET_HOST
+                roles:
+                  doit:
+                    hosts: [local]
+                    run-scripts: [foo]
+                """.replaceAll("TARGET_HOST",getHost().toString())
+                        .replaceAll("SRC",source.getPath())
+        ));
+        RunConfig config = builder.buildConfig(parser);
+        assertFalse("runConfig errors:\n" + config.getErrorStrings().stream().collect(Collectors.joining("\n")), config.hasErrors());
+        Dispatcher dispatcher = new Dispatcher();
+        Run doit = new Run(tmpDir.toString(), config, dispatcher);
+        doit.ensureConsoleLogging();
+        doit.run();
+
+        List.of("~/bar","/tmp/foo/"+source.getName(),"/tmp/foo/foo/"+source.getName()).forEach(path->{
+            assertTrue(path+" should exist",exists(path));
+            String read = readFile(path);
+            assertEquals(wrote,read);
+        });
     }
 
 }
