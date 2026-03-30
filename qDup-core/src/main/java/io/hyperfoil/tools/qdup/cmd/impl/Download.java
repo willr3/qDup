@@ -6,6 +6,7 @@ import io.hyperfoil.tools.qdup.cmd.Cmd;
 import io.hyperfoil.tools.qdup.cmd.Context;
 
 import java.io.File;
+import java.nio.file.Paths;
 import java.util.function.Supplier;
 
 public class Download extends Cmd {
@@ -76,35 +77,77 @@ public class Download extends Cmd {
         String destinationPath =  context == null ? destination : populateStateVariables(basePath + File.separator +destination,this,context);
 
 
-
-        File destinationFile = new File(destinationPath);
-        if(!destinationFile.exists()){
-            destinationFile.mkdirs();
-        }
-        boolean canDownload = true;
-        if(maxSize != null){
-            Long remoteFileSize = local.remoteFileSize(remotePath,host);
-            if(remoteFileSize > maxSize){
-                canDownload = false;
-                logger.warnf("Download File: `%s`; is larger %s than max size: %s bytes", remotePath, remoteFileSize, maxSize);
+        if(context!=null && context.getShell().isActive() && (
+                QueueDownload.hasBashEnv(remotePath) ||
+                remotePath.startsWith("~/") ||
+                !remotePath.startsWith("/")
+            )
+        ){
+            if(isObserving()){
+                getObservedCmd().addDeferredCmd(
+                        new Download(remotePath,populateStateVariables(destination,this,context),maxSize)
+                );
+                return destinationPath;
+            }else{
+                logger.error("context is busy and not observing when running "+this);
             }
-        }
-        if(canDownload) {
-            boolean worked = local.download(remotePath, destinationPath, host);
-            if(!worked){
-                if(context!=null) {
-                    context.error("failed to download " + remotePath + " to " + destinationPath);
-                    context.abort(false);
-                }
+        }else{
+
+            if(context==null && (
+                    QueueDownload.hasBashEnv(remotePath) ||
+                            remotePath.startsWith("~/") ||
+                            !remotePath.startsWith("/")
+            )){
+                //This is an error condition, abort
+                logger.error("cannot download "+remotePath+" without a connection to resolve the full path");
                 return null;
             }
 
+            if(QueueDownload.hasBashEnv(remotePath)){
+                remotePath = context.getShell().shSync("export __qdup_ec=$?; echo "+remotePath+"; (exit $__qdup_ec)");
+            }
+            if(remotePath.startsWith("~/")){
+                //export __qdup_ec=$?; echo "${__qdup_ec}"; (exit $__qdup_ec)
+                String homeDir = context.getShell().shSync("export __qdup_ec=$?; echo ~/; (exit $__qdup_ec)");
+                remotePath = homeDir+remotePath.substring("~/".length());
+            }else if (!remotePath.startsWith("/")){
+                String pwd = context.getShell().shSync("export __qdup_ec=$?; pwd; (exit $__qdup_ec)");
+                String normalized = Paths.get(pwd,remotePath).toAbsolutePath().normalize().toString();
+                if(remotePath.endsWith("/") && !normalized.endsWith("/")){
+                    normalized = normalized + "/";
+                }
+                remotePath = normalized;
+            }
+
+            File destinationFile = new File(destinationPath);
+            if(!destinationFile.exists()){
+                destinationFile.mkdirs();
+            }
+            boolean canDownload = true;
+            if(maxSize != null){
+                Long remoteFileSize = local.remoteFileSize(remotePath,host);
+                if(remoteFileSize > maxSize){
+                    canDownload = false;
+                    logger.warnf("Download File: `%s`; is larger %s than max size: %s bytes", remotePath, remoteFileSize, maxSize);
+                }
+            }
+            if(canDownload) {
+                boolean worked = local.download(remotePath, destinationPath, host);
+                if(!worked){
+                    if(context!=null) {
+                        context.error("failed to download " + remotePath + " to " + destinationPath);
+                        context.abort(false);
+                    }
+                    return null;
+                }
+            }
+            return canDownload ?
+                    destinationPath.endsWith(File.separator) ?
+                            destinationPath + (new File(remotePath)).getName() :
+                            destinationPath + File.separator + (new File(remotePath)).getName()
+                    : null;
         }
-        return canDownload ?
-                destinationPath.endsWith(File.separator) ?
-                        destinationPath + (new File(remotePath)).getName() :
-                        destinationPath + File.separator + (new File(remotePath)).getName()
-                : null;
+        return null; // something went wrong
     }
 
 }

@@ -1,8 +1,6 @@
 package io.hyperfoil.tools.qdup.cmd.impl;
 
-import io.hyperfoil.tools.qdup.Host;
-import io.hyperfoil.tools.qdup.Run;
-import io.hyperfoil.tools.qdup.SecretFilter;
+import io.hyperfoil.tools.qdup.*;
 import io.hyperfoil.tools.qdup.cmd.*;
 import io.hyperfoil.tools.qdup.config.RunConfig;
 import io.hyperfoil.tools.qdup.config.RunConfigBuilder;
@@ -10,7 +8,6 @@ import io.hyperfoil.tools.qdup.config.yaml.Parser;
 import io.hyperfoil.tools.qdup.shell.AbstractShell;
 import io.hyperfoil.tools.yaup.time.SystemTimer;
 import org.junit.Test;
-import io.hyperfoil.tools.qdup.SshTestBase;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.stream.Collectors;
 
@@ -150,5 +148,160 @@ public class UploadTest extends SshTestBase {
         String readContent = Files.readString(Paths.get(response));
         assertEquals(wrote,readContent);
     }
+
+    @Test
+    public void upload_resolve_path() throws IOException {
+        String wrote = "bizbuz";
+        File source = Files.createTempFile("qdup.",".upload.txt").toFile();
+        Files.write(source.toPath(),wrote.getBytes());
+
+        Parser parser = Parser.getInstance();
+        parser.setAbortOnExitCode(true);
+        RunConfigBuilder builder = getBuilder();
+
+        builder.loadYaml(parser.loadFile("pwd",
+                """
+                scripts:
+                  foo:
+                   - sh: export FOLDER=foo
+                   - sh: cd /tmp
+                   - upload: SRC ./foo/
+                   - upload: SRC ~/bar
+                   - upload: SRC ./${FOLDER}/$FOLDER/
+                hosts:
+                  local: TARGET_HOST
+                roles:
+                  doit:
+                    hosts: [local]
+                    run-scripts: [foo]
+                """.replaceAll("TARGET_HOST",getHost().toString())
+                        .replaceAll("SRC",source.getPath())
+        ));
+        RunConfig config = builder.buildConfig(parser);
+        assertFalse("runConfig errors:\n" + config.getErrorStrings().stream().collect(Collectors.joining("\n")), config.hasErrors());
+        Dispatcher dispatcher = new Dispatcher();
+        Run doit = new Run(tmpDir.toString(), config, dispatcher);
+        doit.ensureConsoleLogging();
+        doit.run();
+
+        List.of("~/bar","/tmp/foo/"+source.getName(),"/tmp/foo/foo/"+source.getName()).forEach(path->{
+            assertTrue(path+" should exist",exists(path));
+            String read = readFile(path);
+            assertEquals(wrote,read);
+        });
+    }
+    @Test
+    public void upload_defer_resolve_path() throws IOException {
+        String wrote = "bizbuz";
+        File source = Files.createTempFile("qdup.",".upload.txt").toFile();
+        Files.write(source.toPath(),wrote.getBytes());
+
+        Parser parser = Parser.getInstance();
+        parser.setAbortOnExitCode(true);
+        RunConfigBuilder builder = getBuilder();
+
+        builder.loadYaml(parser.loadFile("pwd",
+                """
+                scripts:
+                  foo:
+                   - sh: export FOLDER=foo
+                   - sh: cd /tmp
+                   - sh: sleep 4s
+                     timer:
+                       1s:
+                       - upload: SRC ./foo/
+                       - upload: SRC ~/bar
+                       - upload: SRC ./${FOLDER}/$FOLDER/
+                hosts:
+                  local: TARGET_HOST
+                roles:
+                  doit:
+                    hosts: [local]
+                    run-scripts: [foo]
+                """.replaceAll("TARGET_HOST",getHost().toString())
+                        .replaceAll("SRC",source.getPath())
+        ));
+        RunConfig config = builder.buildConfig(parser);
+        assertFalse("runConfig errors:\n" + config.getErrorStrings().stream().collect(Collectors.joining("\n")), config.hasErrors());
+        Dispatcher dispatcher = new Dispatcher();
+        Run doit = new Run(tmpDir.toString(), config, dispatcher);
+        doit.ensureConsoleLogging();
+        doit.run();
+
+        List.of("~/bar","/tmp/foo/"+source.getName(),"/tmp/foo/foo/"+source.getName()).forEach(path->{
+            assertTrue(path+" should exist",exists(path));
+            String read = readFile(path);
+            assertEquals(wrote,read);
+        });
+    }
+
+    @Test
+    public void observing_relative_home_alias_and_environment_reference_exit_code() throws IOException {
+
+        Parser parser = Parser.getInstance();
+        parser.setAbortOnExitCode(true);
+        RunConfigBuilder builder = getBuilder();
+
+        File localTmp = File.createTempFile("qdup.",".upload.txt");
+        Files.write(localTmp.toPath(),"local".getBytes());
+        localTmp.deleteOnExit();
+
+        builder.loadYaml(parser.loadFile("pwd",
+                """
+                scripts:
+                  foo:
+                   - sh: export NAME=tres
+                   - sh: export FOLDER=two
+                   - sh: mkdir -p ~/foo/one
+                   - sh: mkdir -p /tmp/foo/two
+                   - sh: echo 'uno' >> ~/foo/one/uno.txt
+                   - sh: echo 'dos' >> /tmp/foo/two/dos.txt
+                   - sh: echo 'tres' >> /tmp/foo/two/tres.txt
+                   - sh: cd /tmp/foo
+                   - sh:
+                       command: sleep 4s; (exit 42);
+                       ignore-exit-code: true
+                     timer:
+                       1s:
+                         - upload: LOCAL_PATH ~/foo/one/uno.txt
+                         - upload: LOCAL_PATH ./two/dos.txt
+                         - upload: LOCAL_PATH /tmp/foo/$FOLDER/${NAME}.txt
+                   - upload: LOCAL_PATH ~/foo/one/uno2.txt
+                   - upload: LOCAL_PATH ./two/dos2.txt
+                   - upload: LOCAL_PATH /tmp/foo/$FOLDER/${NAME}2.txt
+                   - sh: echo $?
+                     then:
+                     - set-state: RUN.ec
+                   - sh: test -f ~/foo/one/uno.txt
+                   - sh: test -f ./two/dos.txt
+                   - sh: test -f /tmp/foo/$FOLDER/${NAME}.txt
+                   - sh: test -f ~/foo/one/uno2.txt
+                   - sh: test -f ./two/dos2.txt
+                   - sh: test -f /tmp/foo/$FOLDER/${NAME}2.txt
+                hosts:
+                  local: TARGET_HOST
+                roles:
+                  doit:
+                    hosts: [local]
+                    run-scripts: [foo]
+                """.replaceAll("TARGET_HOST",getHost().toString())
+                   .replaceAll("LOCAL_PATH",localTmp.getAbsolutePath().toString()
+               )
+        ));
+        RunConfig config = builder.buildConfig(parser);
+        assertFalse("runConfig errors:\n" + config.getErrorStrings().stream().collect(Collectors.joining("\n")), config.hasErrors());
+        Dispatcher dispatcher = new Dispatcher();
+        Run doit = new Run(tmpDir.toString(), config, dispatcher);
+        doit.ensureConsoleLogging();
+        doit.run();
+
+        Host host = config.getAllHostsInRoles().iterator().next();
+
+        State state = doit.getConfig().getState();
+
+        assertTrue("ec should be set",state.has("ec"));
+        assertEquals(42L,state.get("ec"));
+    }
+
 
 }

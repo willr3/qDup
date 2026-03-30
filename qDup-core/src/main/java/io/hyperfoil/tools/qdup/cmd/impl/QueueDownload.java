@@ -4,6 +4,7 @@ import io.hyperfoil.tools.qdup.cmd.Cmd;
 import io.hyperfoil.tools.qdup.cmd.Context;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class QueueDownload extends Cmd {
@@ -56,42 +57,56 @@ public class QueueDownload extends Cmd {
     public void run(String input, Context context) {
         String basePath = context.getRunOutputPath()+ File.separator+context.getShell().getHost().getShortHostName();
         String resolvedPath = Cmd.populateStateVariables(getPath(),this,context);
-        String resolvedDestination = Cmd.populateStateVariables(basePath + File.separator + getDestination(),this,context);
-
-
-        if(hasBashEnv(resolvedPath)){//if the source path has $name or ${name}
-            //This won't work when observing
-            resolvedPath = context.getShell().shSync("echo "+resolvedPath);
-            logger.debug("resolved local env to "+resolvedPath);
+        String resolvedDestination = Cmd.populateStateVariables(getDestination(),this,context);
+        if(!resolvedDestination.startsWith(basePath)){
+            resolvedDestination = Path.of(basePath,resolvedDestination).toString();
         }
-        if(resolvedPath.startsWith("~/")){
-            //This won't work when observing
-            String homeDir = context.getShell().shSync("echo ~/");
 
-            logger.debug("resolved homeDir="+resolvedPath);
-            resolvedPath = homeDir+resolvedPath.substring("~/".length());
-            logger.debug("resolved local env to "+resolvedPath);
-        }else if(!resolvedPath.startsWith("/")){//relative path
-            //TODO can download paths be relative? probably best if no
-            String pwd = context.getCwd();//use cwd instead of pwd because queue-download can be in a watch:
-            logger.debug("resolved local env to "+resolvedPath);
-            if(resolvedPath.startsWith("./")){
-                resolvedPath = resolvedPath.substring("./".length());
+        //if we need to deffer the command
+        if(context.getShell().isActive() && (hasBashEnv(resolvedPath) || resolvedPath.startsWith("~/") || !resolvedPath.startsWith("/") ) ){
+            if(isObserving()){
+                getObservedCmd().addDeferredCmd(
+                        new QueueDownload(resolvedPath,resolvedDestination,maxSize)
+                );
+            } else {
+                logger.error("context is busy and not observing when running "+this);
             }
-            resolvedPath = Paths.get(pwd,resolvedPath).toString();
-        }
-        if(hasBashEnv(resolvedDestination)){//if the destination path has $name or ${name}
-            //This won't work when observing
-            resolvedDestination = context.getShell().shSync("echo "+resolvedDestination);
-        }
-        populatedPath = resolvedPath;
-        populatedDestination = resolvedDestination;
-        context.addPendingDownload(resolvedPath,resolvedDestination, maxSize);
+        }else{
+            if(hasBashEnv(resolvedPath)){//if the source path has $name or ${name}
+                //This won't work when observing
+                resolvedPath = context.getShell().shSync("export __qdup_ec=$?; echo "+resolvedPath+";  (exit $__qdup_ec)");
+                logger.debug("resolved local env to "+resolvedPath);
+            }
+            if(resolvedPath.startsWith("~/")){
+                //This won't work when observing
+                String homeDir = context.getShell().shSync("export __qdup_ec=$?; echo ~/; (exit $__qdup_ec)");
+                logger.debug("resolved homeDir="+resolvedPath);
+                resolvedPath = homeDir+resolvedPath.substring("~/".length());
+                logger.debug("resolved local env to "+resolvedPath);
+            }else if(!resolvedPath.startsWith("/")){//relative path
+                //TODO can download paths be relative? probably best if no
+                String pwd = context.getShell().shSync("export __qdup_ec=$?; pwd; (exit $__qdup_ec)");
+                String normalized = Paths.get(pwd,resolvedPath).toAbsolutePath().normalize().toString();
+                if(resolvedPath.endsWith("/") && !normalized.endsWith("/")){
+                    normalized = normalized + "/";
+                }
+                resolvedPath = normalized;
+                logger.debug("resolved local env to "+resolvedPath);
+            }
+            if(hasBashEnv(resolvedDestination)){//if the destination path has $name or ${name}
+                //This won't work when observing
+                resolvedDestination = context.getShell().shSync("export __qdup_ec=$?; echo "+resolvedDestination+"; (exit $__qdup_ec)");
+            }
+            populatedPath = resolvedPath;
+            populatedDestination = resolvedDestination;
+            context.addPendingDownload(resolvedPath,resolvedDestination, maxSize);
 
-        File destinationFile = new File(resolvedDestination);
-        if(!destinationFile.exists()){
-            destinationFile.mkdirs();
+            File destinationFile = new File(resolvedDestination);
+            if(!destinationFile.exists()){
+                destinationFile.mkdirs();
+            }
         }
+
         context.next(input);
     }
 

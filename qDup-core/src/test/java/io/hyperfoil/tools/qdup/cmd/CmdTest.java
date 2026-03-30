@@ -945,6 +945,44 @@ public class CmdTest extends SshTestBase {
    }
 
    @Test
+   public void run_on_signal_undefined_variable() {
+       Parser parser = Parser.getInstance();
+       RunConfigBuilder builder = getBuilder();
+       builder.loadYaml(parser.loadFile("",
+               """
+               scripts:
+                 foo:
+                 - sh: sleep 30s
+                   on-signal:
+                    "${{ABORT}}":
+                    - abort: "abort called"
+                 snd:
+                 - signal: ${{SEND}}
+               hosts:
+                 local: TARGET_HOST
+               roles:
+                 doit:
+                   hosts: [local]
+                   run-scripts:
+                   - foo:
+                   - snd:
+                       with:
+                         SEND: ""
+               """.replaceAll("TARGET_HOST",getHost().toString())
+       ));
+
+       RunConfig config = builder.buildConfig(parser);
+       assertFalse("unexpected errors:\n"+config.getErrors().stream().map(Objects::toString).collect(Collectors.joining("\n")),config.hasErrors());
+       Dispatcher dispatcher = new Dispatcher();
+
+       Run doit = new Run(tmpDir.toString(), config, dispatcher);
+       doit.ensureConsoleLogging();
+       doit.run();
+       dispatcher.shutdown();
+
+   }
+
+   @Test
    public void run_test_on_signal() {
       RunConfigBuilder builder = getBuilder();
       StringBuilder first = new StringBuilder();
