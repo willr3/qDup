@@ -367,8 +367,8 @@ public class RunConfigBuilder {
       }
       target.put(role, cmd);
    }
-   public void forceRunState(String key, Object value) {
-      state.set(key, value);
+   public void forceRunState(String key, Object value,boolean autoConvert) {
+      state.set(key, value,autoConvert);
    }
 
    public void setRunState(String key, Object value) {

@@ -4,6 +4,7 @@ import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.model.Device;
 import io.hyperfoil.tools.qdup.Host;
 import io.hyperfoil.tools.qdup.config.yaml.HostDefinition;
+import io.hyperfoil.tools.yaup.json.Json;
 import io.quarkus.test.junit.main.LaunchResult;
 import io.quarkus.test.junit.main.QuarkusMainLauncher;
 import io.quarkus.test.junit.main.QuarkusMainTest;
@@ -108,6 +109,36 @@ class QDupTest {
         LaunchResult result = launcher.launch();
         assertNotEquals(0,result.exitCode());
         assertTrue(result.getErrorOutput().contains("Usage:"),result.getErrorOutput());
+    }
+
+    @Test
+    public void state_should_not_autoconvert(QuarkusMainLauncher launcher) throws IOException {
+        Path configPath = Files.writeString(File.createTempFile("qdup",".yaml").toPath(),
+                """
+                scripts:
+                  doit:
+                  - sh: echo ${{VERSION}}
+                hosts:
+                  target: HOST_TARGET
+                roles:
+                  doit:
+                    hosts:
+                    - target
+                    run-scripts:
+                    - doit
+                """.replaceAll("HOST_TARGET",getHost().toString()));
+        configPath.toFile().deleteOnExit();
+        LaunchResult result = launcher.launch("--fullPath","/tmp","--identity",getIdentity(),"-S","VERSION=3.20",configPath.toString());
+        assertEquals(0,result.exitCode());
+        System.out.println(result.getErrorOutput());
+
+        File runJson = new File("/tmp/run.json");
+        assertTrue(runJson.exists());
+        Json content = Json.fromFile(runJson.toPath().toAbsolutePath().toString());
+        assertNotNull(content);
+
+        assertEquals("3.20",content.getJson("state").getString("VERSION"));
+
     }
 
     @Test

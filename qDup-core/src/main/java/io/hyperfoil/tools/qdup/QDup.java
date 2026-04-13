@@ -550,7 +550,7 @@ public class QDup {
         if (!getStateProps().isEmpty()) {
             getStateProps().forEach((k, v) -> {
                 if (v != null && !v.toString().trim().isEmpty()) {
-                    runConfigBuilder.forceRunState(k.toString(), v.toString());
+                    runConfigBuilder.forceRunState(k.toString(), v.toString(),false);
                 }
             });
         }
@@ -559,7 +559,7 @@ public class QDup {
         if (!getRemoveStateProperties().isEmpty()) {
             getRemoveStateProperties().forEach((k, v) -> {
                 if (k != null) {
-                    runConfigBuilder.forceRunState(k.toString(), "");
+                    runConfigBuilder.forceRunState(k.toString(), "",false);
                 }
             });
         }
