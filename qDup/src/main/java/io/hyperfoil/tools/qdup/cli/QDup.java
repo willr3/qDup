@@ -242,14 +242,14 @@ public class QDup implements Callable<Integer>, QuarkusApplication {
         if(stateParameters!=null && !stateParameters.isEmpty()){
             stateParameters.forEach((k,v)->{
                 if (v != null && !v.toString().trim().isEmpty()) {
-                    runConfigBuilder.forceRunState(k.toString(), v.toString());
+                    runConfigBuilder.forceRunState(k.toString(), v.toString(),false);
                 }
             });
         }
         if(removeStateParameters!=null && !removeStateParameters.isEmpty()){
             removeStateParameters.forEach((k)->{
                 if (k != null) {
-                    runConfigBuilder.forceRunState(k, "");
+                    runConfigBuilder.forceRunState(k, "", false);
                 }
             });
         }
