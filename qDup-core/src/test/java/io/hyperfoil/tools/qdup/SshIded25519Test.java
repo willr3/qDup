@@ -20,7 +20,7 @@ public class SshIded25519Test extends SshTestBase {
     @BeforeClass
     public static void createContainer() {
         try {
-            setup(getPath("keys/qdup_ed25519.pub"));
+            setup(getPath("keys/qdup_ed25519.pub"),getPath("keys/qdup_ed25519"));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

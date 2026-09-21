@@ -203,15 +203,15 @@ public class SshTestBase {
     @BeforeClass
     public static void createContainer() {
         try {
-            setup(getPath("keys/qdup.pub"));
+            setup(getPath("keys/qdup.pub"),getPath("keys/qdup"));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
-    public static void setup(Path pubPath ) throws IOException {
-        setup(pubPath,"Dockerfile");
+    public static void setup(Path pubPath ,Path privatePath) throws IOException {
+        setup(pubPath,privatePath,"Dockerfile");
     }
-    public static void setup(Path pubPath, String dockerfile) throws IOException {
+    public static void setup(Path pubPath,Path privatePath, String dockerfile) throws IOException {
         String pub = "";
         try {
             pub = Files.readString(pubPath);
@@ -225,6 +225,8 @@ public class SshTestBase {
                 .withPrivilegedMode(true)
                 .withImagePullPolicy(PullPolicy.defaultPolicy())
                 .withCopyToContainer(Transferable.of(Files.readAllBytes(pubPath)),"/root/.ssh/authorized_keys")
+                .withCopyToContainer(Transferable.of(Files.readAllBytes(pubPath)),"/root/.ssh/key.pub")
+                .withCopyToContainer(Transferable.of(Files.readAllBytes(privatePath)),"/root/.ssh/key")
                 .withCreateContainerCmdModifier(cmd->{
                     ((CreateContainerCmd)cmd).getHostConfig().withSecurityOpts(List.of("label=disable"));
                     ((CreateContainerCmd) cmd).getHostConfig().withDevices(Device.parse("/dev/fuse"));
@@ -232,8 +234,12 @@ public class SshTestBase {
            .withExposedPorts(22);
 
         container.start();
+
         try {
             Container.ExecResult response = container.execInContainer("ls","-al","/root/.ssh");
+            container.execInContainer("chmod","600","/root/.ssh/authorized_keys");
+            container.execInContainer("chmod","600","/root/.ssh/key");
+            //container.execInContainer("chmod","600","/root/.ssh/key.pub");
         }catch(IOException | InterruptedException e){
             e.printStackTrace();
         }
@@ -244,7 +250,7 @@ public class SshTestBase {
         }
         String hostname=container.getHost();
         host = new Host("root",hostname,null,container.getMappedPort(22),null,true,false,null,null);
-        host.setIdentity(getPath("keys/qdup").toFile().getPath());
+        host.setIdentity(privatePath.toFile().getPath());
         hostDefinition = new HostDefinition(host.toString());
 
 

@@ -18,7 +18,7 @@ public class ZshShellTest extends SshTestBase {
     @BeforeClass
     public static void createContainer() {
         try {
-            setup(getPath("keys/qdup.pub"),"ZshDockerfile");
+            setup(getPath("keys/qdup.pub"),getPath("keys/qdup"),"ZshDockerfile");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

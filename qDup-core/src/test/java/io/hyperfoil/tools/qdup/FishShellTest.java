@@ -18,7 +18,7 @@ public class FishShellTest extends SshTestBase {
     @BeforeClass
     public static void createContainer() {
         try {
-            setup(getPath("keys/qdup.pub"),"FishDockerfile");
+            setup(getPath("keys/qdup.pub"),getPath("keys/qdup"),"FishDockerfile");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
