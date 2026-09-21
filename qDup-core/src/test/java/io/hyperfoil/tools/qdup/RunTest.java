@@ -717,6 +717,53 @@ public class RunTest extends SshTestBase {
       assertTrue("run should about",state.has(QDUP_GLOBAL+"."+QDUP_GLOBAL_ABORTED));
    }
 
+   @Test
+   public void export_env_qdup_prompt(){
+       Parser parser = Parser.getInstance();
+       parser.setAbortOnExitCode(true);
+       RunConfigBuilder builder = getBuilder();
+
+       builder.loadYaml(parser.loadFile("pwd",
+               """
+               scripts:
+                 foo:
+                   - sh: /usr/sbin/sshd &
+                   - sh: echo "$PS1"
+                   - sh: chmod 600 /root/.ssh/key
+                   - sh: ls -al /root/.ssh
+                   - add-prompt: "]# "
+                   - sh:
+                       command: ssh -v -i /root/.ssh/key -o UserKnownHostsFile=/dev/null 127.0.0.1
+                       prompt:
+                         "(yes/no/[fingerprint])? ": "yes"
+                   - sh: export PS1="${{ENV.QDUP_PROMPT}}"
+                   - sh: pwd
+                     then:
+                     - set-state: RUN.pwd
+               hosts:
+                 local: TARGET_HOST
+               roles:
+                 doit:
+                   hosts: [local]
+                   run-scripts: [foo]
+               """.replaceAll("TARGET_HOST",getHost().toString())
+                       .replaceAll("QDUP_GLOBAL",QDUP_GLOBAL)
+                       .replaceAll("QDUP_ABORTED",QDUP_GLOBAL_ABORTED)
+                       .replaceAll("PORT",""+getHost().getPort())
+
+       ));
+       RunConfig config = builder.buildConfig(parser);
+       assertFalse("runConfig errors:\n" + config.getErrorStrings().stream().collect(Collectors.joining("\n")), config.hasErrors());
+       Dispatcher dispatcher = new Dispatcher();
+       Run doit = new Run(tmpDir.toString(), config, dispatcher);
+       doit.ensureConsoleLogging();
+
+       JsonServer server = new JsonServer(Vertx.vertx(),doit,31337);
+       server.start();
+
+       doit.run();
+       assertFalse("run should not abort",doit.isAborted());
+   }
 
    @Test
    public void test_exit_code_abort_state(){
