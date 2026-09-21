@@ -22,6 +22,8 @@ public class EscapeFilteredStream extends MultiStream {
     private static final int NULL = 0; //\u0000
     private static final int SHIFT_IN = 15;
     private static final int SHIFT_OUT = 14;
+    private static final byte[] OSC_3008_PREFIX = new byte[]{ESC,']','3','0','0','8'};
+    private static final byte[] OSC_3008_SUFFIX = new byte[]{ESC,'\\'};
 
     //https://en.wikipedia.org/wiki/ANSI_escape_code
     private static final Set<Character> CONTROL_SUFFIX = Sets.of(
@@ -51,6 +53,7 @@ public class EscapeFilteredStream extends MultiStream {
 
     private byte[] buffered;
     private int writeIndex = 0;
+    private boolean osc3008 = false;
 
     public EscapeFilteredStream(){this("");}
     public EscapeFilteredStream(String name){
@@ -222,6 +225,17 @@ public class EscapeFilteredStream extends MultiStream {
                             && b[off+12]=='c'
                             && b[off+13]==ESC
                             && b[off+14]=='\\'
+                        ) || ( // osc 3008 start of message and end of message
+                          len >= 6
+                          && b[off+ 1]==']'
+                          && b[off+ 2]=='3'
+                          && b[off+ 3]=='0'
+                          && b[off+ 4]=='0'
+                          && b[off+ 5]=='8'
+                          && b[off+ len -2] == ESC
+                          && b[off+ len -1] == '\\'
+                        ) || (
+                          len >= 2 && b[off+ 1]=='\\' // osc 3008 end of message
                         )
                     )
                 );
@@ -238,7 +252,17 @@ public class EscapeFilteredStream extends MultiStream {
     public int escapeLength(byte b[], int off, int len) {
         boolean matching = true;
         int rtrn = 0;
-        if (b[off] == 'e'){ // check for miss-configured zsh backspace
+        if(osc3008){
+            //look for ESC\
+            int i=0;
+            while(rtrn + i < len && b[off + rtrn + i] != ESC){
+                i++;
+            }
+            if(rtrn + i +1 < len && b[off + rtrn + i +1 ] == '\\'){
+                i++;
+            }
+            rtrn = i;
+        }else if (b[off] == 'e'){ // check for miss-configured zsh backspace
             if(len == 1 ){
                 rtrn = 1;
             }else if(len >= 2 && b[off+1] == 8){
@@ -300,6 +324,26 @@ public class EscapeFilteredStream extends MultiStream {
                             if(off+rtrn < len && b[off+rtrn] == (char)7){
                                 rtrn++;
                             }
+                        }else {
+
+                            matching = true;
+                            while (rtrn + i < len && i < OSC_3008_PREFIX.length && matching) {
+                                matching = OSC_3008_PREFIX[i] == b[off + rtrn + i];
+                                i++;
+                            }
+                            if (i == OSC_3008_PREFIX.length && matching) {//if fully matching the osc 3008 prefix
+                                //osc3008 = true; //TODO set osc3008 somewhere else?
+                                while (rtrn + i < len && matching) {//scan for ESC\
+                                    if (b[off + rtrn + i] == OSC_3008_SUFFIX[0]) {
+                                        if (rtrn + i + 1 < len && b[off + rtrn + i + 1] == OSC_3008_SUFFIX[1]) {
+                                            i++;
+                                            matching = false;//end of prefix sequence
+                                        }
+                                    }
+                                    i++;//test the next character
+                                }
+                            }
+                            rtrn += i; //increment i to wherever osc 3008 ended or mid osc 3008
                         }
                     }
 

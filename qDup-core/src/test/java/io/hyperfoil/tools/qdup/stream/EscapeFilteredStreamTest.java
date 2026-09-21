@@ -314,7 +314,50 @@ public class EscapeFilteredStreamTest {
         String output = new String(outputStream.toByteArray());
             assertEquals("nested escapes should be filtered","xxx",output);
     }
+    @Test
+    public void filter_osc3008(){
+        assertEquals("osc3008 should be filtered","0",filter("\u001b]3008;a=3;b=2;\u001b\\0"));
+        assertEquals("osc3008 should be filtered","0",filter("\u001b]3008;a=3;b=2;\u001b\\0\u001b]3008;a=3;b=2;\u001b\\"));
+        assertEquals("osc3008 should be filtered","",filter("\u001b]3008;a=3;b=2;\u001b\\\u001b]3008;a=3;b=2;\u001b\\"));
+    }
 
+    @Test
+    public void isCompleteEscapeSequence_osc3008(){
+        EscapeFilteredStream fs = new EscapeFilteredStream();
+        byte b[] = "\u001b]3008;a=3;\u001b\\a".getBytes();
+
+        assertFalse(fs.isCompleteEscapeSequence(b,0,2));
+        assertFalse(fs.isCompleteEscapeSequence(b,0,3));
+        assertFalse(fs.isCompleteEscapeSequence(b,0,4));
+        assertFalse(fs.isCompleteEscapeSequence(b,0,5));
+        assertFalse(fs.isCompleteEscapeSequence(b,0,6));
+        assertFalse(fs.isCompleteEscapeSequence(b,0,7));
+        assertFalse(fs.isCompleteEscapeSequence(b,0,8));
+        assertFalse(fs.isCompleteEscapeSequence(b,0,9));
+        assertFalse(fs.isCompleteEscapeSequence(b,0,10));
+        assertFalse(fs.isCompleteEscapeSequence(b,0,11));
+        assertFalse(fs.isCompleteEscapeSequence(b,0,12));
+        assertTrue(fs.isCompleteEscapeSequence(b,0,13));
+        assertFalse(fs.isCompleteEscapeSequence(b,0,14));
+        assertFalse(fs.isCompleteEscapeSequence(b,0,15));
+
+    }
+    @Test
+    public void escapeLength_osc3008() {
+        String input;
+        assertEquals("partial osc3008 prefix",2,new EscapeFilteredStream().escapeLength( (input="\u001b]").getBytes(),0,input.getBytes().length));
+        assertEquals("partial osc3008 prefix",3,new EscapeFilteredStream().escapeLength( (input="\u001b]3").getBytes(),0,input.getBytes().length));
+        assertEquals("partial osc3008 prefix",4,new EscapeFilteredStream().escapeLength( (input="\u001b]30").getBytes(),0,input.getBytes().length));
+        assertEquals("partial osc3008 prefix",5,new EscapeFilteredStream().escapeLength( (input="\u001b]300").getBytes(),0,input.getBytes().length));
+        assertEquals("partial osc3008 prefix",6,new EscapeFilteredStream().escapeLength( (input="\u001b]3008").getBytes(),0,input.getBytes().length));
+        assertEquals("partial osc3008 prefix",7,new EscapeFilteredStream().escapeLength( (input="\u001b]3008;").getBytes(),0,input.getBytes().length));
+        assertEquals("partial osc3008 prefix",8,new EscapeFilteredStream().escapeLength( (input="\u001b]3008;a").getBytes(),0,input.getBytes().length));
+        assertEquals("partial osc3008 prefix",9,new EscapeFilteredStream().escapeLength( (input="\u001b]3008;a=").getBytes(),0,input.getBytes().length));
+        assertEquals("partial osc3008 prefix",10,new EscapeFilteredStream().escapeLength( (input="\u001b]3008;a=3").getBytes(),0,input.getBytes().length));
+        assertEquals("partial osc3008 prefix",11,new EscapeFilteredStream().escapeLength( (input="\u001b]3008;a=3\u001b").getBytes(),0,input.getBytes().length));
+        assertEquals("partial osc3008 prefix",12,new EscapeFilteredStream().escapeLength( (input="\u001b]3008;a=3\u001b\\").getBytes(),0,input.getBytes().length));
+        assertEquals("partial osc3008 prefix",12,new EscapeFilteredStream().escapeLength( (input="\u001b]3008;a=3\u001b\\a").getBytes(),0,input.getBytes().length));
+    }
     @Test
     public void escapeLength(){
         EscapeFilteredStream fs = new EscapeFilteredStream();
