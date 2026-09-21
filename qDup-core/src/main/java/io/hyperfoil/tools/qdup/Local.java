@@ -125,13 +125,18 @@ public class Local {
          json.set("source",remoteString);
          json.set("destination",destination);
          json.set("knownHost",hasKnownHosts()?getKnownHosts():false);
-         json.set("identity",hasIdentity()?getIdentity():false);
-         if(host.hasContainerId()){
+          if(host.hasIdentity()){
+              json.set("identity",host.getIdentity());
+          }else if (hasIdentity()){
+              json.set("identity",getIdentity());
+          }
+
+          if(host.hasContainerId()){
             json.set("container",host.getContainerId());
          }
          //we need to upload command to send to host, we will send the file from remoteHost
          List<String> populated = Cmd.populateList(json,host.getUpload()).stream().filter(v->v!=null && !v.isBlank()).collect(Collectors.toUnmodifiableList());
-         if(Cmd.hasPatternReference(populated, StringUtil.PATTERN_PREFIX)){
+          if(Cmd.hasPatternReference(populated, StringUtil.PATTERN_PREFIX)){
             logger.error("failed to populate remote upload pattern: "+populated.stream().collect(Collectors.joining(" "))+"\nhost: "+remoteHost);
             stpe.shutdownNow();
             return false;
@@ -148,9 +153,14 @@ public class Local {
          Json json = new Json();
          json.set("host",host.toJson());
          json.set("source",path);
+         json.set("isDirectory",new File(path).isDirectory());
          json.set("destination",destination);
          json.set("knownHost",hasKnownHosts()?getKnownHosts():false);
-         json.set("identity",hasIdentity()?getIdentity():false);
+         if(host.hasIdentity()){
+             json.set("identity",host.getIdentity());
+         }else if (hasIdentity()){
+             json.set("identity",getIdentity());
+         }
          if(host.hasContainerId()){
             json.set("container",host.getContainerId());
          }
@@ -265,8 +275,13 @@ public class Local {
          //need a tmp destination on the remoteHost
          json.set("destination",remoteDestination);
          json.set("knownHost",hasKnownHosts()?getKnownHosts():false);
-         json.set("identity",hasIdentity()?getIdentity():false);
-         if(host.hasContainerId()){
+          if(host.hasIdentity()){
+              json.set("identity",host.getIdentity());
+          }else if (hasIdentity()){
+              json.set("identity",getIdentity());
+          }
+
+          if(host.hasContainerId()){
             json.set("container",host.getContainerId());
          }
          List<String> populated = Cmd.populateList(json,host.getDownload()).stream().filter(v->v!=null && !v.isBlank()).collect(Collectors.toUnmodifiableList());
@@ -297,8 +312,13 @@ public class Local {
          json.set("source",path);
          json.set("destination",destination);
          json.set("knownHost",hasKnownHosts()?getKnownHosts():false);
-         json.set("identity",hasIdentity()?getIdentity():false);
-         if(host.hasContainerId()){
+          if(host.hasIdentity()){
+              json.set("identity",host.getIdentity());
+          }else if (hasIdentity()){
+              json.set("identity",getIdentity());
+          }
+
+          if(host.hasContainerId()){
             json.set("container",host.getContainerId());
          }
          //this is painfully slow in vscode debugger :(
@@ -326,8 +346,13 @@ public class Local {
          json.set("host",host.toJson());
          json.set("source",path);
          json.set("knownHost",hasKnownHosts()?getKnownHosts():false);
-         json.set("identity",hasIdentity()?getIdentity():false);
-         List<String> populated = Cmd.populateList(json,host.getGetFileSize()).stream().filter(v->{
+          if(host.hasIdentity()){
+              json.set("identity",host.getIdentity());
+          }else if (hasIdentity()){
+              json.set("identity",getIdentity());
+          }
+
+          List<String> populated = Cmd.populateList(json,host.getGetFileSize()).stream().filter(v->{
             return v!=null && !v.isEmpty();
          }).collect(Collectors.toUnmodifiableList());
          StringBuilder sb = new StringBuilder();
