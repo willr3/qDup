@@ -2,6 +2,7 @@ package io.hyperfoil.tools.qdup.cli;
 
 import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.model.Device;
+import io.hyperfoil.tools.qdup.Globals;
 import io.hyperfoil.tools.qdup.Host;
 import io.hyperfoil.tools.qdup.SecretFilter;
 import io.hyperfoil.tools.qdup.config.yaml.HostDefinition;
@@ -233,25 +234,20 @@ class QDupTest {
     public void stream_logging(QuarkusMainLauncher launcher) throws IOException {
         Path configPath = Files.writeString(File.createTempFile("qdup",".yaml").toPath(),
                 """
-                 scripts:
-                   secrets:
-                   - sh: sleep 10s
-                     timer:
-                       1s:
-                       - send-text: ${{foo}}
-                       4s:
-                       - ctrlC
-                 hosts:
-                   local: TARGET_HOST
-                 roles:
-                   doit:
-                     hosts: [local]
-                     setup-scripts: [secrets]
-                 states:
-                   foo: blank
-                """.replaceAll("HOST_TARGET",getHost().toString()));
+                scripts:
+                  doit:
+                  - sh: echo -e "one\\ntwo\\nthree"
+                hosts:
+                  target: TARGET_HOST
+                roles:
+                  test:
+                    hosts:
+                    - target
+                    run-scripts:
+                    - doit
+                """.replaceAll("TARGET_HOST",getHost().toString()));
         configPath.toFile().deleteOnExit();
-        LaunchResult result = launcher.launch("-S","_foo=bar", "--fullPath","/tmp","--identity",getIdentity(),configPath.toString());
+        LaunchResult result = launcher.launch("--"+ Globals.STREAM_LOGGING, "--fullPath","/tmp","--identity",getIdentity(),configPath.toString());
         assertEquals(0,result.exitCode());
         File runLog = new File("/tmp/run.log");
         assertTrue(runLog.exists());
