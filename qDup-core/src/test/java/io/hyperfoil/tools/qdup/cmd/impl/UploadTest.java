@@ -6,14 +6,17 @@ import io.hyperfoil.tools.qdup.config.RunConfig;
 import io.hyperfoil.tools.qdup.config.RunConfigBuilder;
 import io.hyperfoil.tools.qdup.config.yaml.Parser;
 import io.hyperfoil.tools.qdup.shell.AbstractShell;
+import io.hyperfoil.tools.qdup.shell.ContainerShell;
 import io.hyperfoil.tools.yaup.time.SystemTimer;
 import org.junit.Test;
+import org.testcontainers.shaded.com.google.common.collect.Lists;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -23,6 +26,112 @@ import java.util.stream.Collectors;
 import static org.junit.Assert.*;
 
 public class UploadTest extends SshTestBase {
+
+
+    @Test
+    // should first copy to
+    public void upload_folder_local_remote_container_consistency() throws IOException {
+        Path tmpSrc = Files.createTempDirectory("source");
+
+        Path f1 = Files.createTempFile(tmpSrc,"f1",".txt");
+        Path f2 = Files.createTempFile(tmpSrc,"f2",".txt");
+
+        Files.write(f1,"one".getBytes());
+        Files.write(f2,"two".getBytes());
+
+        AbstractShell localShell = AbstractShell.getShell(
+            "return_remote_path_new_name",
+            Host.parse(Host.LOCAL),//getHost(),//
+            new ScheduledThreadPoolExecutor(2),
+            new SecretFilter(),
+            null
+        );
+
+        AbstractShell remoteShell = AbstractShell.getShell(
+                "return_remote_path_new_name",
+                getHost(),
+                new ScheduledThreadPoolExecutor(2),
+                new SecretFilter(),
+                null
+        );
+        Path runPath = Files.createTempDirectory("run");
+        Run run = new Run(runPath.toString(),getBuilder().buildConfig(),new Dispatcher());
+
+        Host host = Host.parse("quay.io/fedora/fedora", getContainerPlatform());
+        host.setIdentity(getIdentity());
+        AbstractShell containerShell = AbstractShell.getShell(
+                "container_start_also_connects",
+                host,
+                "",
+                new ScheduledThreadPoolExecutor(2),
+                new SecretFilter(),
+                null
+        );
+
+
+        assertTrue(containerShell.getHost().isContainer());
+        assertTrue(containerShell.isOpen());
+        assertTrue(containerShell.isReady());
+
+        ScriptContext localContext = new ScriptContext(localShell,run.getConfig().getState(),run,new SystemTimer("upload"),Cmd.NO_OP(),true);
+        SpyContext localSpyContext = new SpyContext(localContext,run.getConfig().getState(), run.getCoordinator());
+
+        ScriptContext remoteContext = new ScriptContext(remoteShell,run.getConfig().getState(),run,new SystemTimer("upload"),Cmd.NO_OP(),true);
+        SpyContext remoteSpyContext = new SpyContext(remoteContext,run.getConfig().getState(), run.getCoordinator());
+
+        ScriptContext containerContext = new ScriptContext(containerShell,run.getConfig().getState(),run,new SystemTimer("upoad"),Cmd.NO_OP(),true);
+        SpyContext containerSpyContext = new SpyContext(containerContext,run.getConfig().getState(), run.getCoordinator());
+
+        for(Upload upload : List.of(
+            new Upload(tmpSrc.toString()+"/",Files.createTempDirectory("dest").toString()+"/"),
+            new Upload(tmpSrc.toString()+"/",Files.createTempDirectory("dest").toString()),
+            new Upload(tmpSrc.toString(),Files.createTempDirectory("dest").toString()+"/"),
+            new Upload(tmpSrc.toString(),Files.createTempDirectory("dest").toString())
+        )){
+            String name = (upload.getPath().endsWith("/") ? "/" : "x") + (upload.getDestination().endsWith("/") ? "/" : "x");
+            List<List<String>> remote = uploadThreeTimes(upload,remoteSpyContext);
+            List<List<String>> local = uploadThreeTimes(upload,localSpyContext);
+            List<List<String>> container = uploadThreeTimes(upload,containerSpyContext);
+
+            List<List<List<String>>> all = List.of(remote,local,container);
+
+            assertNotNull(remote);
+            assertNotNull(local);
+            assertNotNull(container);
+
+            assertEquals(name+" remote",3,remote.size());
+            assertEquals(name+" local",3,local.size());
+            assertEquals(name+" container",3,container.size());
+            for(int i=0; i<3; i++){
+                int x=i;
+                assertTrue(name+" "+i+":"+
+                                "\nremote\n"+String.join("\n",remote.get(i))+
+                                "\nlocal\n"+String.join("\n",local.get(i))+
+                                "\ncontainer\n"+String.join("\n",container.get(i)),
+                        all.stream().mapToInt(ll->ll.get(x).size()).distinct().count() == 1);
+            }
+        }
+
+    }
+
+    private List<List<String>> uploadThreeTimes(Upload upload,Context context) throws IOException {
+        List<List<String>> rtrn = new ArrayList<>();
+        upload.run("",context);
+        rtrn.add(getContent(upload.getDestination(),context.getShell()));
+        upload.run("",context);
+        rtrn.add(getContent(upload.getDestination(),context.getShell()));
+        upload.run("",context);
+        rtrn.add(getContent(upload.getDestination(),context.getShell()));
+
+        return rtrn;
+    }
+    private List<String> getContent(String path,AbstractShell shell) throws IOException {
+        if(shell.getHost().isLocal()){
+            return Files.walk(Path.of(path)).map(Path::toString).toList();
+        } else {
+            return Arrays.asList(exec("/bin/sh","-c","find "+path).split(System.lineSeparator()));
+        }
+    }
 
     @Test
     public void uploadFile(){
@@ -162,7 +271,7 @@ public class UploadTest extends SshTestBase {
 
         assertNotNull("upload should call next",spyContext.getNext());
         String response = spyContext.getNext();
-        assertTrue("response should end with source name",response.endsWith(source.getName()));
+        assertTrue("response should end with source name: "+response,response.endsWith(source.getName()));
         String readContent = Files.readString(Paths.get(response));
         assertEquals(wrote,readContent);
     }
