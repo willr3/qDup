@@ -10,6 +10,7 @@ import io.hyperfoil.tools.qdup.shell.ContainerShell;
 import io.hyperfoil.tools.yaup.time.SystemTimer;
 import org.junit.Test;
 import org.testcontainers.shaded.com.google.common.collect.Lists;
+import org.testcontainers.shaded.com.google.common.collect.Streams;
 
 import java.io.File;
 import java.io.IOException;
@@ -109,6 +110,26 @@ public class UploadTest extends SshTestBase {
                                 "\nlocal\n"+String.join("\n",local.get(i))+
                                 "\ncontainer\n"+String.join("\n",container.get(i)),
                         all.stream().mapToInt(ll->ll.get(x).size()).distinct().count() == 1);
+
+
+
+                if(upload.populatedPath.endsWith("/")){
+                    assertFalse(name+" "+i+": sent folder name despite src/"+
+                            "\nremote\n"+String.join("\n",remote.get(i))+
+                            "\nlocal\n"+String.join("\n",local.get(i))+
+                            "\ncontainer\n"+String.join("\n",container.get(i)),Streams.concat(remote.get(i).stream(),local.get(i).stream(),container.get(i).stream()).anyMatch(d->d.contains(tmpSrc.getName(tmpSrc.getNameCount()-1).toString())));
+                }else if (!upload.populatedPath.endsWith("/") && !upload.populatedDestination.endsWith("/")){
+                    assertTrue(name+" "+i+": sent folder name despite src and dest"+"\nremote\n"+String.join("\n",remote.get(i))+
+                            "\nlocal\n"+String.join("\n",local.get(i))+
+                            "\ncontainer\n"+String.join("\n",container.get(i)),Streams.concat(remote.get(i).stream(),local.get(i).stream(),container.get(i).stream()).anyMatch(d->d.contains(tmpSrc.getName(tmpSrc.getNameCount()-1).toString())));
+                }else { //src dest/
+                    assertTrue(name+" "+i+": missing source path ["+tmpSrc.getName(tmpSrc.getNameCount()-1).toString()+"] in destination"+
+                            "\nremote\n"+String.join("\n",remote.get(i))+
+                                    "\nlocal\n"+String.join("\n",local.get(i))+
+                                    "\ncontainer\n"+String.join("\n",container.get(i)),
+                            Streams.concat(remote.get(i).stream(),local.get(i).stream(),container.get(i).stream()).anyMatch(d->d.contains(tmpSrc.getName(tmpSrc.getNameCount()-1).toString())));
+                }
+
             }
         }
 
