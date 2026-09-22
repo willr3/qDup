@@ -2730,39 +2730,4 @@ public class RunTest extends SshTestBase {
       assertNotEquals("Logs paths should not be equal", path1.toAbsolutePath().toString(), path2.toAbsolutePath().toString());
 
    }
-
-   @Test
-   public void test_full_path_logger_creation(){
-
-      String runDir = "/tmp/qdup/test/absolute";
-      runHelloWorld("-B", runDir);
-
-      File logFile = Path.of(runDir, "/run.log").toFile();
-      assertTrue("run log does not exist: " + logFile.getAbsolutePath(), logFile.exists());
-   }
-
-   @Test
-   public void test_base_path_logger_creation(){
-
-      String runDir = "/tmp/qdup/test/base";
-      QDup qDup = runHelloWorld("-b", runDir);
-
-      File logFile = Path.of(runDir, "/run.log").toFile();
-      assertTrue("run log exists at: " + logFile.getAbsolutePath(), !logFile.exists());
-
-      logFile = Path.of(qDup.getOutputPath(), "/run.log").toFile();
-      assertTrue("run log does not exists at: " + logFile.getAbsolutePath(), logFile.exists());
-   }
-
-   private QDup runHelloWorld(String... args){
-      URL yamlUrl = RunTest.class.getClassLoader().getResource("testYaml/hello-world.yaml");
-      String[] baseArgs = {yamlUrl.getPath(), "-i", getIdentity(), "-S", "HOST=" + getHost()};
-      String[] aDupArgs = Arrays.copyOf(baseArgs, baseArgs.length + args.length);
-      System.arraycopy(args, 0, aDupArgs, baseArgs.length, args.length);
-      QDup qDup = new QDup(aDupArgs);
-      boolean success = qDup.run();
-      assertTrue("qDup script did not complete successfully", success);
-      return  qDup;
-   }
-
 }

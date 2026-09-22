@@ -3,6 +3,7 @@ package io.hyperfoil.tools.qdup.cli;
 import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.model.Device;
 import io.hyperfoil.tools.qdup.Host;
+import io.hyperfoil.tools.qdup.SecretFilter;
 import io.hyperfoil.tools.qdup.config.yaml.HostDefinition;
 import io.hyperfoil.tools.yaup.json.Json;
 import io.quarkus.test.junit.main.LaunchResult;
@@ -232,6 +233,41 @@ class QDupTest {
     public void stream_logging(QuarkusMainLauncher launcher) throws IOException {
         Path configPath = Files.writeString(File.createTempFile("qdup",".yaml").toPath(),
                 """
+                 scripts:
+                   secrets:
+                   - sh: sleep 10s
+                     timer:
+                       1s:
+                       - send-text: ${{foo}}
+                       4s:
+                       - ctrlC
+                 hosts:
+                   local: TARGET_HOST
+                 roles:
+                   doit:
+                     hosts: [local]
+                     setup-scripts: [secrets]
+                 states:
+                   foo: blank
+                """.replaceAll("HOST_TARGET",getHost().toString()));
+        configPath.toFile().deleteOnExit();
+        LaunchResult result = launcher.launch("-S","_foo=bar", "--fullPath","/tmp","--identity",getIdentity(),configPath.toString());
+        assertEquals(0,result.exitCode());
+        File runLog = new File("/tmp/run.log");
+        assertTrue(runLog.exists());
+        String content = Files.readString(runLog.toPath());
+
+        assertTrue(content.contains("] one"),"expending one with log prefix:\n"+content);
+        assertTrue(content.contains("] two"),"expending two with log prefix:\n"+content);
+        assertTrue(content.contains("] three"),"expending three with log prefix:\n"+content);
+
+
+    }
+
+    @Test
+    public void check_log_for_sendText_from_args(QuarkusMainLauncher launcher) throws IOException {
+        Path configPath = Files.writeString(File.createTempFile("qdup",".yaml").toPath(),
+                """
                 scripts:
                   doit:
                   - sh: echo -e "one\\ntwo\\nthree"
@@ -248,14 +284,52 @@ class QDupTest {
         LaunchResult result = launcher.launch("--stream-logging", "--fullPath","/tmp","--identity",getIdentity(),configPath.toString());
         assertEquals(0,result.exitCode());
         File runLog = new File("/tmp/run.log");
+        File runJson = new File("/tmp/run.json");
         assertTrue(runLog.exists());
         String content = Files.readString(runLog.toPath());
+        String json = Files.readString(runJson.toPath());
 
-        assertTrue(content.contains("] one"),"expending one with log prefix:\n"+content);
-        assertTrue(content.contains("] two"),"expending two with log prefix:\n"+content);
-        assertTrue(content.contains("] three"),"expending three with log prefix:\n"+content);
+        assertFalse(content.contains("bar"),"log should not contain bar\n"+content);
+        assertFalse(json.contains("bar"),"run.json should not contain bar\n"+json);
+
 
     }
+    @Test
+    public void check_log_for_sendText_from_states(QuarkusMainLauncher launcher) throws IOException {
+        Path configPath = Files.writeString(File.createTempFile("qdup",".yaml").toPath(),
+              """
+              scripts:
+                secrets:
+                - sh: sleep 10s
+                  timer:
+                    1s:
+                    - send-text: ${{foo}}
+                    4s:
+                    - ctrlC
+              hosts:
+                local: TARGET_HOST
+              roles:
+                doit:
+                  hosts: [local]
+                  setup-scripts: [secrets]
+              states:
+                SECRET_NAME_PREFIXfoo: bar
+              """.replaceAll("TARGET_HOST",getHost().toString())
+                        .replaceAll("SECRET_NAME_PREFIX", SecretFilter.SECRET_NAME_PREFIX));
+        configPath.toFile().deleteOnExit();
+        LaunchResult result = launcher.launch("--fullPath","/tmp","--identity",getIdentity(),configPath.toString());
+        assertEquals(0,result.exitCode());
+        File runLog = new File("/tmp/run.log");
+        File runJson = new File("/tmp/run.json");
+        assertTrue(runLog.exists());
+        String content = Files.readString(runLog.toPath());
+        String json = Files.readString(runJson.toPath());
+
+        assertFalse(content.contains("bar"),"log should not contain bar\n"+content);
+        assertFalse(json.contains("bar"),"run.json should not contain bar\n"+json);
+
+    }
+
 
     @Test
     public void main_exit_invalid_yaml(QuarkusMainLauncher launcher) throws IOException {
