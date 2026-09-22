@@ -58,7 +58,7 @@ public class Host {
     public static final List<String> LOCAL_LINUX_CONNECT_SHELL = Arrays.asList("script", "--quiet","--command","/bin/bash","/dev/null");
     public static final List<String> LOCAL_MACOS_CONNECT_SHELL = Arrays.asList("script", "-q", "/dev/null", "/bin/bash");
     //LOCAL_EXEC uses System.getRuntime().exec(...)
-    public static final List<String> LOCAL_LINUX_UPLOAD = Arrays.asList("cp","-r","${{source}}","${{destination}}");
+    public static final List<String> LOCAL_LINUX_UPLOAD = Arrays.asList("cp","-r","${{='${{source}}'.endsWith('/') ? '${{source}}'+'.' : '${{source}}'}}","${{destination}}");
     public static final List<String> LOCAL_LINUX_DOWNLOAD = Arrays.asList("cp","-r","${{source}}","${{destination}}");
     public static final List<String> LOCAL_LINUX_FILE_SIZE = Arrays.asList("du","-cb","${{source}}","|","grep","total","|","cut","-d","\t","-f1");
 

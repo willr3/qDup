@@ -55,11 +55,18 @@ public class Upload extends Cmd {
                 }
                 populatedDestination = normalized;
             }
-
+            File pathFile = new File(populatedPath);
+            if(!pathFile.exists()){
+                context.error("missing upload file "+populatedPath);
+                context.abort(false);
+                return;
+            }
             //create remote directory
-            if(populatedDestination.endsWith("/")) {
+            if(populatedDestination.endsWith("/")){
                 context.getShell().shSync("export __qdup_ec=$?; mkdir -p " + populatedDestination+"; (exit $__qdup_ec)");
-                populatedDestination+=(new File(populatedPath)).getName();
+                if(!pathFile.isDirectory()){
+                    populatedDestination += pathFile.getName();
+                }
             }
             boolean worked = context.getLocal().upload(
                     populatedPath,
