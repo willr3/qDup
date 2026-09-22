@@ -320,6 +320,22 @@ public class EscapeFilteredStreamTest {
         assertEquals("osc3008 should be filtered","0",filter("\u001b]3008;a=3;b=2;\u001b\\0\u001b]3008;a=3;b=2;\u001b\\"));
         assertEquals("osc3008 should be filtered","",filter("\u001b]3008;a=3;b=2;\u001b\\\u001b]3008;a=3;b=2;\u001b\\"));
     }
+    @Test
+    public void write_osc3008_separate_writes() throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        EscapeFilteredStream stream = new EscapeFilteredStream();
+        stream.addStream("baos",outputStream);
+        stream.write(EscapeFilteredStream.OSC_3008_PREFIX);
+        stream.write(";a=1;b=2;".getBytes());
+        stream.write(EscapeFilteredStream.OSC_3008_SUFFIX);
+        String output =  new String(outputStream.toByteArray());
+        assertEquals("nothing should have written so far","",output);
+
+        stream.write("a".getBytes());
+        output =  new String(outputStream.toByteArray());
+        assertEquals("should see a","a",output);
+
+    }
 
     @Test
     public void isCompleteEscapeSequence_osc3008(){

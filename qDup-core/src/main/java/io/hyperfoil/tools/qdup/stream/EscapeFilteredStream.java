@@ -1,6 +1,5 @@
 package io.hyperfoil.tools.qdup.stream;
 
-import io.hyperfoil.tools.yaup.AsciiArt;
 import io.hyperfoil.tools.yaup.Sets;
 import org.jboss.logging.Logger;
 
@@ -22,8 +21,8 @@ public class EscapeFilteredStream extends MultiStream {
     private static final int NULL = 0; //\u0000
     private static final int SHIFT_IN = 15;
     private static final int SHIFT_OUT = 14;
-    private static final byte[] OSC_3008_PREFIX = new byte[]{ESC,']','3','0','0','8'};
-    private static final byte[] OSC_3008_SUFFIX = new byte[]{ESC,'\\'};
+    public static final byte[] OSC_3008_PREFIX = new byte[]{ESC,']','3','0','0','8'};
+    public static final byte[] OSC_3008_SUFFIX = new byte[]{ESC,'\\'};
 
     //https://en.wikipedia.org/wiki/ANSI_escape_code
     private static final Set<Character> CONTROL_SUFFIX = Sets.of(
@@ -150,6 +149,7 @@ public class EscapeFilteredStream extends MultiStream {
                     int escapeLength = escapeLength(buffered, currentIndex, writeIndex - currentIndex);
                     if (escapeLength > 0 && isCompleteEscapeSequence(buffered, currentIndex, escapeLength)) {//is full match, flush to super
                         filtered = true;
+
                     } else if (escapeLength > 0) {//match reached end of buffer
                         if (trailingEscapeIndex > currentIndex) {
                             trailingEscapeIndex = currentIndex;
@@ -172,6 +172,7 @@ public class EscapeFilteredStream extends MultiStream {
                     superWrite(buffered, flushIndex, trailingEscapeIndex - flushIndex);
                 }
                 flushIndex = trailingEscapeIndex;
+
             } else {// no matches and no potential matches, flush everything
                 superWrite(buffered, flushIndex, writeIndex - flushIndex);
                 flushIndex = writeIndex - 1;
@@ -183,6 +184,10 @@ public class EscapeFilteredStream extends MultiStream {
             if (flushIndex > 0) {
                 System.arraycopy(buffered, flushIndex, buffered, 0, writeIndex - flushIndex);
                 writeIndex = writeIndex - flushIndex;
+                if(isosc3008Start(buffered,0,writeIndex)){
+                    osc3008 = true;
+                }
+
             }
 
         }catch(Exception e){
@@ -192,6 +197,20 @@ public class EscapeFilteredStream extends MultiStream {
     }
     //basically just makes sure we have \u001b[...m
     //checks that the escape sequence is complete and not partially finished
+    public boolean isosc3008Start(byte b[], int off, int len){
+        return len>=6 &&
+                b[ off + 0 ]==OSC_3008_PREFIX[0] &&
+                b[ off + 1 ]==OSC_3008_PREFIX[1] &&
+                b[ off + 2 ]==OSC_3008_PREFIX[2] &&
+                b[ off + 3 ]==OSC_3008_PREFIX[3] &&
+                b[ off + 4 ]==OSC_3008_PREFIX[4] &&
+                b[ off + 5 ]==OSC_3008_PREFIX[5];
+    }
+    public boolean isOsc3008Full(byte b[], int off, int len){
+        return isosc3008Start(b,off,len) &&
+                b[off+ len -2] == OSC_3008_SUFFIX[0] &&
+                b[off+ len -1] == OSC_3008_SUFFIX[1];
+    }
     public boolean isCompleteEscapeSequence(byte b[], int off, int len){
         boolean rtrn =
                 (len ==1 && (b[off] == CR || b[off] == SHIFT_IN || b[off] == SHIFT_OUT))
@@ -226,14 +245,7 @@ public class EscapeFilteredStream extends MultiStream {
                             && b[off+13]==ESC
                             && b[off+14]=='\\'
                         ) || ( // osc 3008 start of message and end of message
-                          len >= 6
-                          && b[off+ 1]==']'
-                          && b[off+ 2]=='3'
-                          && b[off+ 3]=='0'
-                          && b[off+ 4]=='0'
-                          && b[off+ 5]=='8'
-                          && b[off+ len -2] == ESC
-                          && b[off+ len -1] == '\\'
+                          isOsc3008Full(b,off,len)
                         ) || (
                           len >= 2 && b[off+ 1]=='\\' // osc 3008 end of message
                         )
