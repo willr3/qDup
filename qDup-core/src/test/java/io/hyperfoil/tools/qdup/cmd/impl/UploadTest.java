@@ -110,9 +110,6 @@ public class UploadTest extends SshTestBase {
                                 "\nlocal\n"+String.join("\n",local.get(i))+
                                 "\ncontainer\n"+String.join("\n",container.get(i)),
                         all.stream().mapToInt(ll->ll.get(x).size()).distinct().count() == 1);
-
-
-
                 if(upload.populatedPath.endsWith("/")){
                     assertFalse(name+" "+i+": sent folder name despite src/"+
                             "\nremote\n"+String.join("\n",remote.get(i))+
@@ -129,10 +126,8 @@ public class UploadTest extends SshTestBase {
                                     "\ncontainer\n"+String.join("\n",container.get(i)),
                             Streams.concat(remote.get(i).stream(),local.get(i).stream(),container.get(i).stream()).anyMatch(d->d.contains(tmpSrc.getName(tmpSrc.getNameCount()-1).toString())));
                 }
-
             }
         }
-
     }
 
     private List<List<String>> uploadThreeTimes(Upload upload,Context context) throws IOException {

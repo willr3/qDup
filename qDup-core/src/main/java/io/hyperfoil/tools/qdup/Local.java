@@ -123,6 +123,7 @@ public class Local {
          Json json = new Json();
          json.set("host",host.toJson());
          json.set("source",remoteString);
+         json.set("isDirectory",new File(path).isDirectory());
          json.set("destination",destination);
          json.set("knownHost",hasKnownHosts()?getKnownHosts():false);
           if(host.hasIdentity()){
