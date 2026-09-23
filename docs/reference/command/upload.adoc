@@ -22,3 +22,43 @@ stored in the same folder structure as the qDup script.
 ----
 - upload: ${{ENV.SCRIPT_DIR}}/web.xml
 ----
+
+Upload uses different tools to send the files depending on the type of target host.
+If the host is `LOCAL` then qDup will use `cp`.
+If the host is a container then qDup will use `podman cp` or `docker cp`. Finally, qDup uses `rsync` to send files to a remote host.2
+The default behavior can be replaced by specifying an `upload` option when declaring the host.2
+
+```yaml
+hosts:
+  example:
+    username: me
+    hostnme: example.hostname.internal
+    upload: scp -r ${{source}} ${{host.hostname}}:${{destination}}
+```
+qDup will inject the upload path as `source` and the upload `destination` when populating the command. There are a handful of other
+state values available to a custom upload script command.
+* `host` the json encoding of the host. It will have `username`, `hostname`, `port`, `identity`, `prompt`, `shShell`, `platform`, `container`, `containerId`, and `alias` options if defined in the host definition.
+* `source` the local `path` for the upload
+* `isDirectory` true if the local `source` is a directory
+* `destination` the path on the target host for the upload
+* `knownJost` the known host file path for the local environemnt
+* `identity` - the host identity or local identity file used for connecting to the remote host
+* `container` - the container id for the target container if applicable.
+
+
+== Upload behavior
+
+If the `path` points to a file and the destination ends in a directory separator (`/` slash) then `upload` will put the file in the folder named in the `destination`.
+If the `destination` does not end in a slash then upload will rename the file to the match the `destination` if the `destination` is not a folder
+or it will put the file in that folder if the destination is a folder.
+
+The sometimes confusing part is how `upload` will behave when the `path` is a folder.
+
+If the `path` ends in a slash (`/`) then `upload` will place the content of the local `source` folder into the `destination` folder.
+```yaml
+- upload: src/ dest # copies all files from src into dest/
+```
+Otherwise, the last folder name at `path` will be crated in the folder indicated by `destination`
+```yaml
+- upload: src dest # creates dest/src/
+```

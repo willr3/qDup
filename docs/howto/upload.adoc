@@ -31,4 +31,4 @@ We can also explicitly set the local file path and the upload destination in yam
     destination: /tmp/
 ```
 
-This format might be easier to read or help if the `path` or `destionation` have spaces
+This format might be easier to read or help if the `path` or `destination` have spaces
