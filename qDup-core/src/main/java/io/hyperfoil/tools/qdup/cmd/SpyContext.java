@@ -26,6 +26,8 @@ public class SpyContext implements Context {
     private Context context;
     private Globals globals;
 
+    private boolean isInterrupted = false;
+
     public SpyContext(){
         this(null,new State(""),new Coordinator(new Globals()));
     }
@@ -50,6 +52,16 @@ public class SpyContext implements Context {
 
     @Override
     public Globals getGlobals(){return globals;}
+
+    @Override
+    public boolean isInterrupted() {
+        return isInterrupted;
+    }
+
+    @Override
+    public void setInterrupted(boolean interrupted) {
+        this.isInterrupted = interrupted;
+    }
 
     @Override
     public Json getTimestamps(){

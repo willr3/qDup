@@ -44,6 +44,22 @@ public class SyncContext implements Context, Runnable{
     @Override
     public Globals getGlobals(){return run.getConfig().getGlobals();}
 
+    @Override
+    public boolean isInterrupted() {
+        if(scriptContext!=null){
+            return scriptContext.isInterrupted();
+        }else{
+            return false;
+        }
+    }
+
+    @Override
+    public void setInterrupted(boolean interrupted) {
+        if(scriptActiveCmd!=null){
+            scriptContext.setInterrupted(interrupted);
+        }
+    }
+
     public Run getRun(){ return run;}
 
     @Override

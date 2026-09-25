@@ -43,4 +43,7 @@ public interface Context {
 
     Globals getGlobals();
 
+    //did the context get a signint
+    boolean isInterrupted();
+    void setInterrupted(boolean interrupted);
 }

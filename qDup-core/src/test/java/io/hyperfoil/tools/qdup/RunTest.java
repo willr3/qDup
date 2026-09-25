@@ -1660,6 +1660,73 @@ public class RunTest extends SshTestBase {
    }
 
    @Test
+   public void ctrlC_does_not_count_as_exit_code(){
+       Parser parser = Parser.getInstance();
+       parser.setAbortOnExitCode(true);
+       RunConfigBuilder builder = getBuilder();
+
+       builder.loadYaml(parser.loadFile("json",
+               """
+               scripts:
+                 foo:
+                 - sh: sleep 10
+                   timer:
+                     1s:
+                     - ctrlC
+                 - set-state: RUN.reached true
+               hosts:
+                 local: TARGET_HOST
+               roles:
+                 doit:
+                   hosts: [local]
+                   run-scripts: [foo]
+               """.replaceAll("TARGET_HOST",getHost().toString())
+       ));
+       RunConfig config = builder.buildConfig(parser);
+
+       assertFalse("runConfig errors:\n" + config.getErrorStrings().stream().collect(Collectors.joining("\n")), config.hasErrors());
+
+       Dispatcher dispatcher = new Dispatcher();
+       Run doit = new Run(tmpDir.toString(), config, dispatcher);
+       doit.run();
+       assertTrue("script should reach set-state",doit.getConfig().getState().has("reached"));
+
+   }
+    @Test
+    public void ctrlC_does_not_prevent_actual_exit_code(){
+        Parser parser = Parser.getInstance();
+        parser.setAbortOnExitCode(true);
+        RunConfigBuilder builder = getBuilder();
+
+        builder.loadYaml(parser.loadFile("json",
+                """
+                scripts:
+                  foo:
+                  - sh: tail -f /tmp/this/does/not/exist;
+                    timer:
+                      1s:
+                      - ctrlC
+                  - sh: pwd
+                  - set-state: RUN.reached true
+                hosts:
+                  local: TARGET_HOST
+                roles:
+                  doit:
+                    hosts: [local]
+                    run-scripts: [foo]
+                """.replaceAll("TARGET_HOST",getHost().toString())
+        ));
+        RunConfig config = builder.buildConfig(parser);
+        assertFalse("runConfig errors:\n" + config.getErrorStrings().stream().collect(Collectors.joining("\n")), config.hasErrors());
+
+        Dispatcher dispatcher = new Dispatcher();
+        Run doit = new Run(tmpDir.toString(), config, dispatcher);
+        doit.run();
+        assertFalse("script should not reach set-state",doit.getConfig().getState().has("reached"));
+        assertTrue("run should abort",doit.isAborted());
+    }
+
+   @Test
    public void echo_exit_status() {
       StringBuilder pwdFirstChildInput = new StringBuilder();
       StringBuilder echoChildInput = new StringBuilder();

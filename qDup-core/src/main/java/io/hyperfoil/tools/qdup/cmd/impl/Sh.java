@@ -9,6 +9,7 @@ import io.hyperfoil.tools.yaup.AsciiArt;
 import io.hyperfoil.tools.yaup.time.SystemTimer;
 
 import java.util.*;
+import java.util.function.Function;
 
 import static io.hyperfoil.tools.qdup.stream.SuffixStream.DEFAULT_DELAY;
 
@@ -122,6 +123,10 @@ public class Sh extends Cmd {
     }
 
     @Override
+    public void preRun(String input,Context context){
+        context.setInterrupted(false);//clear interrupted
+    }
+    @Override
     public void postRun(String output,Context context){
         //turn off stream logging if enabled
         if(context.getCoordinator().getGlobals().getSetting(Globals.STREAM_LOGGING,false)){
@@ -182,11 +187,8 @@ public class Sh extends Cmd {
             //abort on non-zero exit if needed
 
             if( !"0".equals(response) ){
-                boolean couldBeCtrlC = walk(CmdLocation.createTmp(), (cmd) -> {
-                    return cmd instanceof CtrlC;
-                }).stream().anyMatch(Boolean::booleanValue);
-
-                if( !couldBeCtrlC) {
+                boolean isInterrupted = context.isInterrupted();
+                if( !isInterrupted ) {
                     Cmd cmd = this;
                     StringBuilder stack = new StringBuilder();
                     while(cmd!=null){
@@ -240,7 +242,7 @@ public class Sh extends Cmd {
         }
         return rtrn;
     }
-
+    
     @Override public String toString(){
         String toUse = populatedCommand!=null ? populatedCommand : command;
         return "sh: "+toUse;

@@ -100,8 +100,16 @@ public class ScriptContext implements Context, Runnable{
 
     private String roleName="";
     private boolean isAborted=false;
+    private boolean isInterrupted = false;
 
     public boolean checkExitCode(){return checkExitCode;}
+
+    @Override
+    public boolean isInterrupted(){return isInterrupted;}
+    @Override
+    public void setInterrupted(boolean interrupted){
+        this.isInterrupted = interrupted;
+    }
 
     public String getContextId(){
         //TODO use a StringBuilder to correctly handle missing session or root
